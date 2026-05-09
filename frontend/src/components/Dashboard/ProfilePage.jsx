@@ -1,0 +1,198 @@
+import React, { useState } from 'react';
+import { Card, Avatar, Typography, Button, Tag, Progress, Divider, Row, Col, Input, message, Form, Upload } from 'antd';
+import { UserOutlined, MailOutlined, CopyOutlined, EditOutlined, LogoutOutlined, SaveOutlined, CloseOutlined, TrophyOutlined, StarFilled, CameraOutlined } from '@ant-design/icons';
+import { useAuth } from '../../contexts/AuthContext';
+
+const { Title, Text } = Typography;
+
+const LEVEL_THRESHOLDS = [0, 100, 250, 500, 900, 1400, 2000, 2800, 3800, 5000];
+
+function getLevel(xp) {
+  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (xp >= LEVEL_THRESHOLDS[i]) return i + 1;
+  }
+  return 1;
+}
+
+function getXpToNext(xp) {
+  const level = getLevel(xp);
+  if (level >= LEVEL_THRESHOLDS.length) return { current: xp, needed: xp, percent: 100 };
+  const base = LEVEL_THRESHOLDS[level - 1];
+  const next = LEVEL_THRESHOLDS[level];
+  return {
+    current: xp - base,
+    needed: next - base,
+    percent: Math.round(((xp - base) / (next - base)) * 100),
+  };
+}
+
+const LEVEL_NAMES = ['', 'Mầm non 🌱', 'Học sinh 📚', 'Sinh viên 🎓', 'Chiến binh ⚔️',
+  'Anh hùng 🦸', 'Huyền thoại 🌟', 'Bậc thầy 🔥', 'Thần đồng ⚡', 'Bất tử 👑', 'SIGMA 💎'];
+
+export default function ProfilePage() {
+  const { user, profile, signOut, updateProfile } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [form] = Form.useForm();
+
+  const xp = profile?.current_xp || 0;
+  const level = getLevel(xp);
+  const xpInfo = getXpToNext(xp);
+  const handleAvatarUpload = (file) => {
+    const isImage = file.type.startsWith('image/');
+    if (!isImage) {
+      message.error('Chỉ hỗ trợ upload file hình ảnh!');
+      return false;
+    }
+    const isLt2M = file.size / 1024 / 1024 < 2;
+    if (!isLt2M) {
+      message.error('Dung lượng ảnh phải nhỏ hơn 2MB!');
+      return false;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target.result;
+      const { error } = await updateProfile({ avatar_url: base64 });
+      if (error) {
+        message.error('Lỗi khi cập nhật avatar!');
+      } else {
+        message.success('Cập nhật avatar thành công! ✨');
+      }
+    };
+    reader.readAsDataURL(file);
+    return false; // Chặn upload mặc định
+  };
+
+  const handleCopyFriendCode = () => {
+    navigator.clipboard.writeText(profile?.friend_code || '');
+    message.success('Đã copy Friend Code! 🎉');
+  };
+
+  const handleLogout = async () => {
+    const { error } = await signOut();
+    if (error) message.error('Lỗi đăng xuất!');
+  };
+
+  const handleSave = async (values) => {
+    const { error } = await updateProfile({ username: values.username });
+    if (error) {
+      message.error('Lỗi cập nhật!');
+    } else {
+      message.success('Đã lưu tên mới! ✅');
+      setEditing(false);
+    }
+  };
+
+  const cardStyle = { borderRadius: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.08)', border: 'none' };
+
+  return (
+    <div style={{ maxWidth: 700, margin: '0 auto' }}>
+
+      {/* AVATAR + INFO CARD */}
+      <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <Upload showUploadList={false} beforeUpload={handleAvatarUpload} accept="image/*">
+            <div style={{ position: 'relative', cursor: 'pointer' }}>
+              <Avatar 
+                size={100} 
+                src={profile?.avatar_url} 
+                icon={!profile?.avatar_url ? <UserOutlined style={{ color: '#ccc' }} /> : null} 
+                style={{ backgroundColor: '#fff', border: '4px solid rgba(255,255,255,0.5)', flexShrink: 0 }} 
+              />
+              <div style={{ position: 'absolute', bottom: 0, right: 0, background: '#fff', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+                <CameraOutlined style={{ color: '#667eea', fontSize: 16 }} />
+              </div>
+            </div>
+          </Upload>
+          <div style={{ flex: 1 }}>
+            {!editing ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <Title level={3} style={{ margin: 0, color: '#fff', fontWeight: 900 }}>
+                  {profile?.username || 'Student'}
+                </Title>
+                <Button
+                  size="small" icon={<EditOutlined />}
+                  onClick={() => { setEditing(true); form.setFieldValue('username', profile?.username); }}
+                  style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8 }}
+                />
+              </div>
+            ) : (
+              <Form form={form} onFinish={handleSave} style={{ marginBottom: 8 }}>
+                <Form.Item name="username" rules={[{ required: true }, { min: 3 }, { max: 20 }]} style={{ marginBottom: 8 }}>
+                  <Input size="large" style={{ borderRadius: 10, fontWeight: 700, fontSize: 18 }} />
+                </Form.Item>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button htmlType="submit" icon={<SaveOutlined />} type="primary" size="small" style={{ borderRadius: 8 }}>Lưu</Button>
+                  <Button icon={<CloseOutlined />} size="small" onClick={() => setEditing(false)} style={{ borderRadius: 8 }}>Hủy</Button>
+                </div>
+              </Form>
+            )}
+            <Tag color="gold" style={{ borderRadius: 20, fontWeight: 700, fontSize: 13 }}>
+              <StarFilled /> Lv.{level} — {LEVEL_NAMES[level] || 'SIGMA 💎'}
+            </Tag>
+            <Text style={{ display: 'block', color: 'rgba(255,255,255,0.8)', marginTop: 6, fontSize: 13 }}>
+              <MailOutlined style={{ marginRight: 6 }} />{user?.email}
+            </Text>
+          </div>
+        </div>
+      </Card>
+
+      {/* XP CARD */}
+      <Card style={{ ...cardStyle, marginBottom: 24, borderTop: '6px solid #FF6B6B' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text strong style={{ fontSize: 16 }}>⚡ Kinh nghiệm (XP)</Text>
+          <Tag color="volcano" style={{ borderRadius: 20, fontWeight: 700, fontSize: 14 }}>
+            <TrophyOutlined /> {xp} XP tổng
+          </Tag>
+        </div>
+        <Progress
+          percent={xpInfo.percent}
+          strokeColor={{ '0%': '#FF6B6B', '100%': '#C13584' }}
+          strokeWidth={14}
+          format={() => <Text style={{ fontSize: 12, color: '#555' }}>{xpInfo.current}/{xpInfo.needed}</Text>}
+        />
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Còn {xpInfo.needed - xpInfo.current} XP nữa để lên Lv.{level + 1} ({LEVEL_NAMES[level + 1] || 'MAX'})
+        </Text>
+      </Card>
+
+      {/* FRIEND CODE + LOGOUT */}
+      <Row gutter={16}>
+        <Col span={14}>
+          <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%)', height: '100%' }}>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, display: 'block', marginBottom: 8 }}>
+              🤝 Friend Code của bạn
+            </Text>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Title level={2} style={{ margin: 0, color: '#fff', fontWeight: 900, letterSpacing: 4 }}>
+                #{profile?.friend_code || '----'}
+              </Title>
+              <Button
+                icon={<CopyOutlined />} onClick={handleCopyFriendCode}
+                style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', borderRadius: 10 }}
+              >
+                Copy
+              </Button>
+            </div>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 4, display: 'block' }}>
+              Chia sẻ code này để kết bạn!
+            </Text>
+          </Card>
+        </Col>
+        <Col span={10}>
+          <Card style={{ ...cardStyle, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>Muốn nghỉ ngơi chút?</Text>
+              <Button
+                danger size="large" icon={<LogoutOutlined />} block onClick={handleLogout}
+                style={{ borderRadius: 12, fontWeight: 700, height: 48 }}
+              >
+                Đăng xuất
+              </Button>
+            </div>
+          </Card>
+        </Col>
+      </Row>
+    </div>
+  );
+}

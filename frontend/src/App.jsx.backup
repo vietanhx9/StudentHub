@@ -1,0 +1,258 @@
+﻿import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { Layout, Menu, Card, Typography, Input, Button, List, Tag, Statistic, Row, Col, Progress, message, Space, Avatar, Badge, Select, Timeline, Segmented, Checkbox, Modal } from 'antd';
+import { HomeOutlined, DeleteOutlined, CalendarOutlined, CoffeeOutlined, RocketOutlined, ThunderboltOutlined, FireOutlined, UserOutlined, StarFilled } from '@ant-design/icons';
+
+const { Header, Content, Sider } = Layout;
+const { Title, Text } = Typography;
+const { Option } = Select;
+
+// --- KẾT NỐI SUPABASE ---
+const supabase = createClient(
+  'https://cykbdnonqvjbdvpfstze.supabase.co', 
+  'sb_publishable_-wd0I5ysHJMguN3hEpQlYA_qOlc4vjT'
+);
+
+const getTodayVN = () => {
+  const days = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+  return days[new Date().getDay()];
+};
+
+export default function App() {
+  const [tasks, setTasks] = useState([]);
+  const [input, setInput] = useState({ name: '', day: getTodayVN(), note: '', priority: 'Medium' });
+  const [quickInput, setQuickInput] = useState('');
+  const [activeKey, setActiveKey] = useState('1');
+  const [loading, setLoading] = useState(false);
+
+  // --- STATE POMODORO & RULE 5S ---
+  const [pomoMode, setPomoMode] = useState(25);
+  const [timeLeft, setTimeLeft] = useState(1500); 
+  const [isCounting, setIsCounting] = useState(false);
+  const [showRule5s, setShowRule5s] = useState(false);
+  const [countdown5s, setCountdown5s] = useState(5);
+
+  const fetchTasks = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('Tasks').select('*').order('id', { ascending: false });
+    if (!error) setTasks(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchTasks(); }, []);
+
+  // --- LOGIC RULE 5 GIÂY ---
+  const startRule5s = () => {
+    setShowRule5s(true);
+    let count = 5;
+    const timer = setInterval(() => {
+      count -= 1;
+      setCountdown5s(count);
+      if (count === 0) {
+        clearInterval(timer);
+        setShowRule5s(false);
+        setIsCounting(true);
+        message.info("Hết đường lui! CHIẾN THÔI! 🔥");
+        setCountdown5s(5);
+      }
+    }, 1000);
+  };
+
+  const handleAddTask = async (name, day, note, priority, isQuick = false) => {
+    if (!name.trim()) return message.warning('Nhập task vào đi bro!');
+    const { error } = await supabase.from('Tasks').insert([
+      { TaskName: name, day_of_week: day, description: note, priority: priority, is_completed: false }
+    ]);
+
+    if (!error) {
+      message.success('Chốt đơn thành công! 🚀');
+      if (isQuick) setQuickInput('');
+      else setInput({ ...input, name: '', note: '' });
+      fetchTasks();
+    }
+  };
+
+  const toggleComplete = async (id, currentStatus) => {
+    const { error } = await supabase.from('Tasks').update({ is_completed: !currentStatus }).eq('id', id);
+    if (!error) fetchTasks();
+  };
+
+  const deleteTask = async (id) => {
+    const { error } = await supabase.from('Tasks').delete().eq('id', id);
+    if (!error) {
+      message.success('Đã bay màu! 🗑️');
+      fetchTasks();
+    }
+  };
+
+  useEffect(() => {
+    let interval = null;
+    if (isCounting && timeLeft > 0) {
+      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+    } else if (timeLeft === 0) {
+      setIsCounting(false);
+      message.success('Xong phiên Deep Work! 🎉');
+    }
+    return () => clearInterval(interval);
+  }, [isCounting, timeLeft]);
+
+  const changePomoMode = (val) => {
+    setPomoMode(val);
+    setTimeLeft(val * 60);
+    setIsCounting(false);
+  };
+
+  const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  const completedCount = tasks.filter(t => t.is_completed).length;
+  const progressPercent = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
+  const cardStyle = { borderRadius: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.06)', border: 'none' };
+
+  const renderContent = () => {
+    switch (activeKey) {
+      case '1':
+        return (
+          <div className="animate-fade-in">
+            {/* STATS RỰC RỠ NHƯ BẢN ĐẦU */}
+            <Row gutter={[24, 24]}>
+              <Col xs={24} md={8}>
+                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%)' }}>
+                  <Statistic title={<Text style={{color: 'rgba(255,255,255,0.9)', fontWeight: 600}}>Tổng Task</Text>} value={tasks.length} valueStyle={{color: '#fff', fontSize: 40, fontWeight: '900'}} prefix={<StarFilled />} />
+                </Card>
+              </Col>
+              <Col xs={24} md={8}>
+                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #4ECDC4 0%, #556270 100%)' }}>
+                  <Statistic title={<Text style={{color: 'rgba(255,255,255,0.9)', fontWeight: 600}}>Tiến độ hoàn thành</Text>} value={progressPercent} valueStyle={{color: '#fff', fontSize: 40, fontWeight: '900'}} suffix="%" />
+                </Card>
+              </Col>
+              <Col xs={24} md={8}>
+                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #C13584 0%, #833AB4 100%)' }}>
+                  <Statistic title={<Text style={{color: 'rgba(255,255,255,0.9)', fontWeight: 600}}>Chuỗi On Fire 🔥</Text>} value={1} valueStyle={{color: '#fff', fontSize: 40, fontWeight: '900'}} suffix="ngày" />
+                </Card>
+              </Col>
+            </Row>
+
+            <Card title={<Title level={4} style={{margin: 0, color: '#2c3e50'}}>📈 Trạng thái chạy Deadline</Title>} style={{...cardStyle, marginTop: 24, borderTop: '6px solid #4ECDC4'}}>
+                <Progress percent={progressPercent} status="active" strokeColor={{ '0%': '#FF6B6B', '100%': '#4ECDC4' }} strokeWidth={18} />
+            </Card>
+
+            {/* LIST TASK CẢI TIẾN */}
+            <Card title={<Title level={4} style={{margin: 0, color: '#FF6B6B'}}>🎯 Nhiệm vụ hôm nay ({getTodayVN()})</Title>} style={{ ...cardStyle, marginTop: 24, borderLeft: '8px solid #FF6B6B' }}>
+              <Space.Compact style={{ width: '100%', marginBottom: 25 }}>
+                <Input size="large" placeholder="Sực nhớ ra việc gì? Điền liền tay..." value={quickInput} onChange={e => setQuickInput(e.target.value)} onPressEnter={() => handleAddTask(quickInput, getTodayVN(), 'Quick Add', 'Medium', true)} style={{borderRadius: '12px 0 0 12px', background: '#f8f9fa'}} />
+                <Button size="large" type="primary" style={{background: '#FF6B6B', border: 'none', borderRadius: '0 12px 12px 0'}} onClick={() => handleAddTask(quickInput, getTodayVN(), 'Quick Add', 'Medium', true)}>🚀 Triển</Button>
+              </Space.Compact>
+              
+              <List
+                loading={loading}
+                dataSource={tasks.filter(t => t.day_of_week === getTodayVN())}
+                renderItem={item => (
+                  <List.Item 
+                    actions={[<Button type="text" danger icon={<DeleteOutlined />} onClick={() => deleteTask(item.id)} />]} 
+                    style={{ background: '#fff', marginBottom: 12, borderRadius: 16, padding: '16px 20px', border: '2px solid #f1f2f6' }}
+                  >
+                    <Checkbox checked={item.is_completed} onChange={() => toggleComplete(item.id, item.is_completed)}>
+                      <Text delete={item.is_completed} strong style={{fontSize: 16, color: item.is_completed ? '#bfbfbf' : '#2c3e50'}}>{item.TaskName}</Text>
+                      <div style={{color: '#7f8fa6', fontSize: 12}}>{item.description}</div>
+                    </Checkbox>
+                    <Tag color={item.priority === 'High' ? 'red' : 'blue'} style={{borderRadius: 20, fontWeight: 'bold'}}>{item.priority}</Tag>
+                  </List.Item>
+                )}
+              />
+            </Card>
+          </div>
+        );
+      case '2':
+        return (
+          <Card style={cardStyle} title={<Title level={4} style={{margin: 0}}>🗓️ Master Schedule</Title>}>
+            <div style={{ background: '#f1f2f6', padding: 24, borderRadius: 20, marginBottom: 30 }}>
+              <Row gutter={[16, 16]}>
+                <Col span={12}><Input size="large" placeholder="Tên nhiệm vụ..." value={input.name} onChange={e => setInput({...input, name: e.target.value})} /></Col>
+                <Col span={6}>
+                  <Select size="large" style={{width: '100%'}} value={input.day} onChange={v => setInput({...input, day: v})}>
+                    {['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ Nhật'].map(d => <Option key={d} value={d}>{d}</Option>)}
+                  </Select>
+                </Col>
+                <Col span={6}>
+                  <Select size="large" style={{width: '100%'}} value={input.priority} onChange={v => setInput({...input, priority: v})}>
+                    <Option value="High">Gấp (High)</Option>
+                    <Option value="Medium">Vừa (Medium)</Option>
+                    <Option value="Low">Thấp (Low)</Option>
+                  </Select>
+                </Col>
+                <Col span={18}><Input size="large" placeholder="Ghi chú thêm..." value={input.note} onChange={e => setInput({...input, note: e.target.value})} /></Col>
+                <Col span={6}><Button type="primary" size="large" block style={{background: '#4ECDC4', border: 'none', borderRadius: 12}} onClick={() => handleAddTask(input.name, input.day, input.note, input.priority)}>+ Thêm Lịch</Button></Col>
+              </Row>
+            </div>
+            <Timeline mode="left" items={['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ Nhật'].map(day => ({
+              label: <Text strong>{day}</Text>,
+              color: day === getTodayVN() ? '#FF6B6B' : 'blue',
+              children: (
+                <div style={{minHeight: 20}}>
+                  {tasks.filter(t => t.day_of_week === day).map(t => (
+                    <div key={t.id} style={{background: '#fff', padding: '10px', borderRadius: 12, border: '1px solid #dfe4ea', marginBottom: 8, display: 'flex', justifyContent: 'space-between'}}>
+                      <Text delete={t.is_completed}>{t.TaskName}</Text>
+                      <Button type="text" danger icon={<DeleteOutlined />} onClick={() => deleteTask(t.id)} />
+                    </div>
+                  ))}
+                </div>
+              )
+            }))} />
+          </Card>
+        );
+      case '3':
+        return (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '65vh' }}>
+            <Card style={{ ...cardStyle, width: 500, textAlign: 'center', padding: '40px 20px', background: 'linear-gradient(to bottom, #ffffff, #fdfbfb)' }}>
+              <Title level={2} style={{color: '#2c3e50', fontWeight: 800}}>FLOW STATE 🌌</Title>
+              <Segmented size="large" block options={[5, 15, 25, 50]} value={pomoMode} onChange={changePomoMode} style={{ marginBottom: 40, borderRadius: 16 }} />
+              <Progress type="circle" percent={(timeLeft / (pomoMode * 60)) * 100} width={260} strokeColor={{ '0%': '#FF6B6B', '100%': '#C13584' }} format={() => <Text style={{fontSize: 56, fontWeight: '900'}}>{formatTime(timeLeft)}</Text>} />
+              <div style={{ marginTop: 50 }}>
+                {!isCounting ? (
+                  <Button size="large" type="primary" shape="round" icon={<RocketOutlined />} style={{height: 60, width: 220, fontSize: 18, background: '#FF6B6B', border: 'none'}} onClick={startRule5s}>DIỆT TRÌ HOÃN (5S)</Button>
+                ) : (
+                  <Button size="large" shape="round" style={{height: 60, width: 220}} onClick={() => setIsCounting(false)}>TẠM DỪNG</Button>
+                )}
+              </div>
+            </Card>
+
+            <Modal open={showRule5s} footer={null} closable={false} centered>
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <Title level={2}>HÀNH ĐỘNG NGAY!</Title>
+                <div style={{ fontSize: 120, color: '#ff4d4f', fontWeight: 900 }}>{countdown5s}</div>
+                <Text type="secondary">Đừng để bộ não kịp nghĩ lý do để lười!</Text>
+              </div>
+            </Modal>
+          </div>
+        );
+      default: return null;
+    }
+  };
+
+  return (
+    <Layout style={{ minHeight: '100vh', fontFamily: "'Nunito', sans-serif" }}>
+      <Sider theme="light" width={260} style={{ borderRight: '1px solid #f1f2f6' }}>
+        <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 20px' }}>
+            <div style={{ background: 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)', borderRadius: 16, padding: '12px 20px', display: 'flex', alignItems: 'center', width: '100%' }}>
+                <RocketOutlined style={{ color: '#fff', fontSize: 24, marginRight: 10 }} />
+                <Text style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>STUDENT HUB</Text>
+            </div>
+        </div>
+        <Menu mode="inline" selectedKeys={[activeKey]} onClick={e => setActiveKey(e.key)} style={{ borderRight: 'none', padding: '10px 16px', fontWeight: 600 }} items={[{ key: '1', icon: <HomeOutlined />, label: 'Dashboard' }, { key: '2', icon: <CalendarOutlined />, label: 'Lịch chạy show' }, { key: '3', icon: <CoffeeOutlined />, label: 'Góc Deep Work' }]} />
+      </Sider>
+      <Layout style={{ background: '#fdfdfd' }}>
+        <Header style={{ background: '#fff', padding: '0 32px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', borderBottom: '1px solid #f1f2f6', height: 80 }}>
+            <Space size="middle">
+                <Tag color="magenta" style={{borderRadius: 20, padding: '4px 12px'}}>K69 IT2 - HUST</Tag>
+                <Badge dot color="#52c41a">
+                    <Avatar size="large" src="https://api.dicebear.com/7.x/notionists/svg?seed=Felix" />
+                </Badge>
+            </Space>
+        </Header>
+        <Content style={{ padding: '32px 40px', background: '#fafbfc' }}>
+            <div style={{ maxWidth: 1200, margin: '0 auto' }}>{renderContent()}</div>
+        </Content>
+      </Layout>
+    </Layout>
+  );
+}
