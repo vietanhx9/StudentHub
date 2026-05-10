@@ -577,6 +577,93 @@ h5.ant-typography {
   border-color: var(--border-color) !important;
 }
 
+/* ==================== GEN Z ANIMATION KEYFRAMES ==================== */
+@keyframes completeFlash {
+  0%   { background: var(--bg-surface-2); box-shadow: none; }
+  30%  { background: rgba(82,196,26,0.18); box-shadow: 0 0 20px rgba(82,196,26,0.35); }
+  100% { background: var(--bg-surface-2); box-shadow: none; }
+}
+
+@keyframes floatUp {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  60%  { opacity: 1; transform: translateY(-60px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-100px) scale(0.9); }
+}
+
+@keyframes xpPulse {
+  0%   { transform: scale(1); box-shadow: none; }
+  40%  { transform: scale(1.35); box-shadow: 0 0 24px rgba(255,107,107,0.7); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+
+@keyframes levelUpEntrance {
+  0%   { transform: scale(0.5) rotate(-8deg); opacity: 0; }
+  60%  { transform: scale(1.12) rotate(3deg); opacity: 1; }
+  80%  { transform: scale(0.97) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes timerGlow {
+  0%, 100% { text-shadow: 0 0 40px rgba(255,107,107,0.4); }
+  50%       { text-shadow: 0 0 80px rgba(255,107,107,0.9), 0 0 120px rgba(193,53,132,0.4); }
+}
+
+@keyframes questClaim {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ==================== ANIMATION UTILITY CLASSES ==================== */
+.task-complete-anim {
+  animation: completeFlash 0.9s ease-out forwards !important;
+}
+
+.float-xp {
+  position: fixed;
+  pointer-events: none;
+  z-index: 99998;
+  font-weight: 900;
+  font-size: 22px;
+  color: #F7C948;
+  text-shadow: 0 2px 12px rgba(247,201,72,0.7);
+  animation: floatUp 1.4s ease-out forwards;
+  white-space: nowrap;
+}
+
+.xp-flash {
+  animation: xpPulse 0.55s ease-out forwards !important;
+  display: inline-flex !important;
+}
+
+.timer-glow {
+  animation: timerGlow 1.2s ease-in-out infinite !important;
+}
+
+.quest-claim-anim {
+  animation: questClaim 0.35s ease-out;
+}
+
+/* Gen Z micro-interactions */
+.ant-btn:active {
+  transform: scale(0.93) !important;
+  transition: transform 0.08s ease !important;
+}
+
+.ant-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease !important;
+}
+
+.ant-card:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.25) !important;
+}
+
 /* ==================== CUSTOM PARTICLE BACKGROUND ==================== */
 .particle-bg {
   position: fixed;
