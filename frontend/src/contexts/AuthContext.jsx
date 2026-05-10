@@ -96,16 +96,27 @@ export const AuthProvider = ({ children }) => {
       if (data) {
         setProfile(data);
       } else {
-        // Row chưa tồn tại (signup race condition) → tự tạo mặc định
+        // Row chưa tồn tại (Google OAuth hoặc signup race condition) → tự tạo mặc định
         const { data: { session } } = await supabase.auth.getSession();
         const email = session?.user?.email || '';
         const friendCode = Math.floor(1000 + Math.random() * 9000).toString();
-        const { data: newProfile } = await supabase
+        const { data: newProfile, error: upsertError } = await supabase
           .from('users')
           .upsert([{ id: userId, email, username: 'Student', friend_code: friendCode }], { onConflict: 'id' })
           .select()
           .single();
-        if (newProfile) setProfile(newProfile);
+        if (upsertError) {
+          console.error('Không thể tạo profile row:', upsertError.message, upsertError.code);
+        } else if (newProfile) {
+          setProfile(newProfile);
+          // Tạo inventory cho user mới (Google OAuth không đi qua signUp)
+          await supabase.from('inventory').upsert([
+            { user_id: userId, item_type: 'water', quantity: 10 },
+            { user_id: userId, item_type: 'golden_water', quantity: 0 },
+            { user_id: userId, item_type: 'booster', quantity: 0 },
+            { user_id: userId, item_type: 'seed', quantity: 1 },
+          ], { onConflict: 'user_id,item_type', ignoreDuplicates: true });
+        }
       }
     } catch (error) {
       console.error('Error loading profile:', error.message);
@@ -207,6 +218,22 @@ export const AuthProvider = ({ children }) => {
   // UPDATE PROFILE
   const updateProfile = async (updates) => {
     try {
+      if (!profile) {
+        // Chưa có profile row (Google OAuth lần đầu đăng nhập) → tạo mới
+        const friendCode = Math.floor(1000 + Math.random() * 9000).toString();
+        const { data, error } = await supabase
+          .from('users')
+          .upsert(
+            [{ id: user.id, email: user?.email || '', username: 'Student', friend_code: friendCode, ...updates }],
+            { onConflict: 'id' }
+          )
+          .select()
+          .single();
+        if (error) throw error;
+        if (data) setProfile(data);
+        return { error: null };
+      }
+
       const { error } = await supabase
         .from('users')
         .update(updates)
