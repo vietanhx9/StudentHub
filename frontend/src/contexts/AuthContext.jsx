@@ -83,7 +83,7 @@ export const AuthProvider = ({ children }) => {
         .from('users')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Profile load timeout')), 4000)
@@ -92,7 +92,21 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (error) throw error;
-      setProfile(data);
+
+      if (data) {
+        setProfile(data);
+      } else {
+        // Row chưa tồn tại (signup race condition) → tự tạo mặc định
+        const { data: { session } } = await supabase.auth.getSession();
+        const email = session?.user?.email || '';
+        const friendCode = Math.floor(1000 + Math.random() * 9000).toString();
+        const { data: newProfile } = await supabase
+          .from('users')
+          .upsert([{ id: userId, email, username: 'Student', friend_code: friendCode }], { onConflict: 'id' })
+          .select()
+          .single();
+        if (newProfile) setProfile(newProfile);
+      }
     } catch (error) {
       console.error('Error loading profile:', error.message);
     } finally {
@@ -115,16 +129,17 @@ export const AuthProvider = ({ children }) => {
         // 2. Tạo profile trong database
         const friendCode = Math.floor(1000 + Math.random() * 9000).toString();
         
+        // upsert thay vì insert: an toàn khi DB trigger đã tạo row trước
         const { error: profileError } = await supabase
           .from('users')
-          .insert([
+          .upsert([
             {
               id: authData.user.id,
               email: email,
               username: username || `student_${friendCode}`,
               friend_code: friendCode,
             },
-          ]);
+          ], { onConflict: 'id' });
 
         if (profileError) throw profileError;
 
@@ -192,15 +207,24 @@ export const AuthProvider = ({ children }) => {
   // UPDATE PROFILE
   const updateProfile = async (updates) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const email = session?.user?.email || '';
+
+      // upsert: tạo row nếu chưa có, update nếu có rồi
       const { error } = await supabase
         .from('users')
-        .update(updates)
-        .eq('id', user.id);
+        .upsert({
+          id: user.id,
+          email,
+          friend_code: profile?.friend_code || Math.floor(1000 + Math.random() * 9000).toString(),
+          ...updates,
+        }, { onConflict: 'id' });
 
       if (error) throw error;
 
-      // Reload profile sau khi update
-      await loadProfile(user.id);
+      // Cập nhật state ngay lập tức
+      setProfile(prev => prev ? { ...prev, ...updates } : { id: user.id, email, ...updates });
+      loadProfile(user.id);
       return { error: null };
     } catch (error) {
       return { error };

@@ -1149,7 +1149,7 @@ export default function App() {
                   👤 {profile?.username || user?.email?.split('@')[0] || 'Student'}
                 </Tag>
                 <Badge dot color="#52c41a" onClick={() => setActiveKey('6')} style={{ cursor: 'pointer' }}>
-                    <Avatar size="large" src={profile?.avatar_url || `https://api.dicebear.com/7.x/notionists/svg?seed=${profile?.username || 'student'}`} style={{ cursor: 'pointer', border: '2px solid rgba(255,255,255,0.15)' }} />
+                    <Avatar size="large" src={profile?.avatar_url?.startsWith('data:') ? profile.avatar_url : null} style={{ cursor: 'pointer', border: '2px solid rgba(255,255,255,0.15)', backgroundColor: '#fff' }} />
                 </Badge>
             </Space>
         </Header>

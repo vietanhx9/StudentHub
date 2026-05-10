@@ -43,24 +43,31 @@ export default function ProfilePage() {
       message.error('Chỉ hỗ trợ upload file hình ảnh!');
       return false;
     }
-    const isLt2M = file.size / 1024 / 1024 < 2;
-    if (!isLt2M) {
-      message.error('Dung lượng ảnh phải nhỏ hơn 2MB!');
-      return false;
-    }
 
     const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target.result;
-      const { error } = await updateProfile({ avatar_url: base64 });
-      if (error) {
-        message.error('Lỗi khi cập nhật avatar!');
-      } else {
-        message.success('Cập nhật avatar thành công! ✨');
-      }
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = async () => {
+        // Resize xuống tối đa 256x256, giữ tỉ lệ
+        const MAX = 256;
+        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const compressed = canvas.toDataURL('image/jpeg', 0.82);
+
+        const { error } = await updateProfile({ avatar_url: compressed });
+        if (error) {
+          message.error(`Lỗi avatar: ${error.message || JSON.stringify(error)}`);
+        } else {
+          message.success('Cập nhật avatar thành công! ✨');
+        }
+      };
+      img.src = e.target.result;
     };
     reader.readAsDataURL(file);
-    return false; // Chặn upload mặc định
+    return false;
   };
 
   const handleCopyFriendCode = () => {
@@ -93,11 +100,10 @@ export default function ProfilePage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <Upload showUploadList={false} beforeUpload={handleAvatarUpload} accept="image/*">
             <div style={{ position: 'relative', cursor: 'pointer' }}>
-              <Avatar 
-                size={100} 
-                src={profile?.avatar_url} 
-                icon={!profile?.avatar_url ? <UserOutlined style={{ color: '#ccc' }} /> : null} 
-                style={{ backgroundColor: '#fff', border: '4px solid rgba(255,255,255,0.5)', flexShrink: 0 }} 
+              <Avatar
+                size={100}
+                src={profile?.avatar_url?.startsWith('data:') ? profile.avatar_url : null}
+                style={{ backgroundColor: '#fff', border: '4px solid rgba(255,255,255,0.5)', flexShrink: 0 }}
               />
               <div style={{ position: 'absolute', bottom: 0, right: 0, background: '#fff', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
                 <CameraOutlined style={{ color: '#667eea', fontSize: 16 }} />
