@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase';
 import { useAuth } from './contexts/AuthContext';
 import { Layout, Menu, Card, Typography, Input, InputNumber, Button, List, Tag, Statistic, Row, Col, Progress, message, Space, Avatar, Badge, Select, Timeline, Segmented, Checkbox, Modal, DatePicker } from 'antd';
 import dayjs from 'dayjs';
-import { HomeOutlined, DeleteOutlined, CalendarOutlined, CoffeeOutlined, RocketOutlined, ThunderboltOutlined, UserOutlined, StarFilled, TrophyOutlined, TeamOutlined, CrownFilled, BarChartOutlined, SoundOutlined, StopOutlined, CloseOutlined } from '@ant-design/icons';
+import { HomeOutlined, DeleteOutlined, CalendarOutlined, CoffeeOutlined, RocketOutlined, ThunderboltOutlined, UserOutlined, StarFilled, TrophyOutlined, TeamOutlined, CrownFilled, BarChartOutlined, SoundOutlined, StopOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 import { useTheme } from './contexts/ThemeContext';
 import TreePage from './components/Dashboard/TreePage';
@@ -81,6 +81,7 @@ export default function App() {
   const [friendCodeInput, setFriendCodeInput] = useState('');
   const [leaderboard, setLeaderboard] = useState([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -417,7 +418,7 @@ export default function App() {
     if (!user) return;
     setFriendsLoading(true);
     try {
-      const { data: friendships } = await supabase.from('friendships').select('friend_id').eq('user_id', user.id);
+      const { data: friendships } = await supabase.from('friendships').select('friend_id').eq('user_id', user.id).eq('status', 'accepted');
       const friendIds = (friendships || []).map(f => f.friend_id);
 
       let friendProfiles = [];
@@ -443,21 +444,65 @@ export default function App() {
     setFriendsLoading(false);
   };
 
+  const fetchPendingRequests = async () => {
+    if (!user) return;
+    const { data: rows } = await supabase.from('friendships').select('id, user_id').eq('friend_id', user.id).eq('status', 'pending');
+    if (!rows || rows.length === 0) { setPendingRequests([]); return; }
+    const senderIds = rows.map(r => r.user_id);
+    const { data: senders } = await supabase.from('users').select('id, username, avatar_url').in('id', senderIds);
+    setPendingRequests(rows.map(r => ({
+      id: r.id,
+      sender: (senders || []).find(s => s.id === r.user_id) || { id: r.user_id, username: 'Unknown' },
+    })));
+  };
+
   const addFriend = async () => {
     if (!friendCodeInput.trim()) return message.warning('Nhập friend code đi!');
     const { data: found } = await supabase.from('users').select('id, username').eq('friend_code', friendCodeInput.trim()).neq('id', user.id).limit(1);
     if (!found || found.length === 0) return message.error('Không tìm thấy người dùng với code này!');
     const friend = found[0];
-    const { data: existing } = await supabase.from('friendships').select('id').eq('user_id', user.id).eq('friend_id', friend.id).maybeSingle();
-    if (existing) return message.warning('Đã là bạn bè rồi!');
-    const { error } = await supabase.from('friendships').insert([{ user_id: user.id, friend_id: friend.id }]);
-    if (error) return message.error('Thêm bạn thất bại!');
-    message.success(`Đã thêm ${friend.username} vào danh sách! 🎉`);
+
+    const { data: existing } = await supabase.from('friendships').select('id, status').eq('user_id', user.id).eq('friend_id', friend.id).maybeSingle();
+    if (existing?.status === 'accepted') return message.warning('Đã là bạn bè rồi!');
+    if (existing?.status === 'pending') return message.warning('Đã gửi lời mời rồi, chờ họ chấp nhận nhé! ⏳');
+
+    // Nếu họ đã gửi lời mời cho mình → auto accept
+    const { data: reverse } = await supabase.from('friendships').select('id').eq('user_id', friend.id).eq('friend_id', user.id).eq('status', 'pending').maybeSingle();
+    if (reverse) {
+      await supabase.from('friendships').update({ status: 'accepted' }).eq('id', reverse.id);
+      await supabase.from('friendships').insert([{ user_id: user.id, friend_id: friend.id, status: 'accepted' }]);
+      message.success(`Kết bạn thành công với ${friend.username}! 🎉 (Họ đã gửi lời mời trước)`);
+      setFriendCodeInput('');
+      fetchPendingRequests();
+      fetchFriends();
+      return;
+    }
+
+    const { error } = await supabase.from('friendships').insert([{ user_id: user.id, friend_id: friend.id, status: 'pending' }]);
+    if (error) return message.error('Gửi lời mời thất bại!');
+    message.success(`Đã gửi lời mời kết bạn đến ${friend.username}! ✉️`);
     setFriendCodeInput('');
+  };
+
+  const acceptFriend = async (requestId, senderId) => {
+    await supabase.from('friendships').update({ status: 'accepted' }).eq('id', requestId);
+    await supabase.from('friendships').insert([{ user_id: user.id, friend_id: senderId, status: 'accepted' }]);
+    message.success('Đã chấp nhận lời mời kết bạn! 🎉');
+    fetchPendingRequests();
     fetchFriends();
   };
 
-  useEffect(() => { if (activeKey === '7') fetchFriends(); }, [activeKey]);
+  const rejectFriend = async (requestId) => {
+    await supabase.from('friendships').delete().eq('id', requestId);
+    message.info('Đã từ chối lời mời.');
+    fetchPendingRequests();
+  };
+
+  useEffect(() => {
+    if (activeKey === '7') { fetchFriends(); fetchPendingRequests(); }
+  }, [activeKey]);
+
+  useEffect(() => { if (user) fetchPendingRequests(); }, [user]);
 
   const upsertDailyLog = async (xpDelta = 0, deepWorkDelta = 0, tasksDelta = 0) => {
     if (!user) return;
@@ -1002,6 +1047,22 @@ export default function App() {
                 </div>
               </div>
 
+              {pendingRequests.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <Title level={5} style={{ marginBottom: 12 }}>📬 Lời mời kết bạn ({pendingRequests.length})</Title>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {pendingRequests.map(req => (
+                      <div key={req.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: 'rgba(78,205,196,0.08)', border: '1px solid rgba(78,205,196,0.3)' }}>
+                        <Avatar size={40} src={req.sender.avatar_url?.startsWith('data:') ? req.sender.avatar_url : null} style={{ backgroundColor: '#fff', border: '2px solid rgba(78,205,196,0.4)', flexShrink: 0 }} />
+                        <Text strong style={{ flex: 1, color: 'var(--text-primary)' }}>{req.sender.username}</Text>
+                        <Button type="primary" size="small" icon={<CheckOutlined />} onClick={() => acceptFriend(req.id, req.sender.id)} style={{ borderRadius: 8, background: '#4ECDC4', border: 'none' }}>Chấp nhận</Button>
+                        <Button size="small" icon={<CloseOutlined />} onClick={() => rejectFriend(req.id)} style={{ borderRadius: 8 }}>Từ chối</Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Title level={5} style={{ marginBottom: 16 }}>🏆 Bảng xếp hạng</Title>
               {friendsLoading ? (
                 <div style={{ textAlign: 'center', padding: 40 }}><Text type="secondary">Đang tải...</Text></div>
@@ -1127,7 +1188,7 @@ export default function App() {
           { key: '4', icon: <span>🌳</span>, label: 'Cây của tôi' },
           { key: '5', icon: <TrophyOutlined />, label: 'Thành tích' },
           { key: '6', icon: <UserOutlined />, label: 'Hồ sơ cá nhân' },
-          { key: '7', icon: <TeamOutlined />, label: 'Bạn bè' },
+          { key: '7', icon: <TeamOutlined />, label: <Badge count={pendingRequests.length} size="small" offset={[8, 0]}>Bạn bè</Badge> },
           { key: '8', icon: <BarChartOutlined />, label: 'Thống kê' },
         ]} />
       </Sider>

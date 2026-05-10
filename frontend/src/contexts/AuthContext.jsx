@@ -207,24 +207,14 @@ export const AuthProvider = ({ children }) => {
   // UPDATE PROFILE
   const updateProfile = async (updates) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const email = session?.user?.email || '';
-
-      // upsert: tạo row nếu chưa có, update nếu có rồi
       const { error } = await supabase
         .from('users')
-        .upsert({
-          id: user.id,
-          email,
-          friend_code: profile?.friend_code || Math.floor(1000 + Math.random() * 9000).toString(),
-          ...updates,
-        }, { onConflict: 'id' });
+        .update(updates)
+        .eq('id', user.id);
 
       if (error) throw error;
 
-      // Cập nhật state ngay lập tức
-      setProfile(prev => prev ? { ...prev, ...updates } : { id: user.id, email, ...updates });
-      loadProfile(user.id);
+      setProfile(prev => prev ? { ...prev, ...updates } : null);
       return { error: null };
     } catch (error) {
       return { error };
