@@ -133,8 +133,11 @@ export const AuthProvider = ({ children }) => {
           { user_id: authData.user.id, item_type: 'water', quantity: 10 },
           { user_id: authData.user.id, item_type: 'golden_water', quantity: 0 },
           { user_id: authData.user.id, item_type: 'booster', quantity: 0 },
-          { user_id: authData.user.id, item_type: 'seed', quantity: 1 }, // 1 seed để plant cây đầu tiên
+          { user_id: authData.user.id, item_type: 'seed', quantity: 1 },
         ]);
+
+        // Reload profile sau khi tạo xong để tránh race condition với onAuthStateChange
+        await loadProfile(authData.user.id);
 
         return { user: authData.user, error: null };
       }

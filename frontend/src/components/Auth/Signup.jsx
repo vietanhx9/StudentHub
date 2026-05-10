@@ -56,7 +56,7 @@ const Signup = ({ onSwitchToLogin }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
   const [selectedTree, setSelectedTree] = useState(null);
-  const { signUp } = useAuth();
+  const { signUp, updateProfile } = useAuth();
   const [form] = Form.useForm();
 
   const handleStep1 = async (values) => {
@@ -104,10 +104,7 @@ const Signup = ({ onSwitchToLogin }) => {
           },
         ]);
 
-        await supabase
-          .from('users')
-          .update({ current_xp: 50, total_xp: 50 })
-          .eq('id', user.id);
+        await updateProfile({ current_xp: 50, total_xp: 50 });
 
         message.success('🎉 Chào mừng đến Student Hub! Hành trình bắt đầu!');
       }
