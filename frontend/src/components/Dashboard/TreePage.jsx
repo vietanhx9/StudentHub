@@ -16,7 +16,7 @@ const TREE_MAP = {
 const STAGE_LABELS = ['', '🌰 Hạt mầm', '🌱 Mầm non', '🌿 Cây con', '🪴 Cây lớn', '🌳 Cây trưởng thành'];
 
 export default function TreePage() {
-  const { user, profile } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
   const [tree, setTree] = useState(null);
   const [water, setWater] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -26,7 +26,7 @@ export default function TreePage() {
     if (!user) return;
     setLoading(true);
     const [{ data: treeData }, { data: invData }] = await Promise.all([
-      supabase.from('trees').select('*').eq('user_id', user.id).eq('is_active', true).single(),
+      supabase.from('trees').select('*').eq('user_id', user.id).eq('is_active', true).limit(1).maybeSingle(),
       supabase.from('inventory').select('quantity').eq('user_id', user.id).eq('item_type', 'water').single(),
     ]);
     setTree(treeData || null);
@@ -48,12 +48,17 @@ export default function TreePage() {
 
       await Promise.all([
         supabase.from('inventory').update({ quantity: newWater }).eq('user_id', user.id).eq('item_type', 'water'),
-        supabase.from('users').update({ current_xp: newXp, total_xp: newTotal }).eq('id', user.id),
+        updateProfile({ current_xp: newXp, total_xp: newTotal }),
         supabase.from('trees').update({ growth_stage: newStage }).eq('id', tree.id),
       ]);
 
       setWater(newWater);
       setTree(prev => ({ ...prev, growth_stage: newStage }));
+
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+      const waterKey = `water_count_${today}`;
+      localStorage.setItem(waterKey, (parseInt(localStorage.getItem(waterKey) || '0', 10) + 1).toString());
+
       message.success(`+10 XP! Cây đã được tưới 💧 (Còn ${newWater} nước)`);
     } catch (e) {
       message.error('Lỗi tưới cây!');
@@ -90,19 +95,19 @@ export default function TreePage() {
       {/* STATS */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={8}>
-          <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #4ECDC4, #44A08D)', textAlign: 'center' }}>
+          <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #4ECDC4, #44A08D)', textAlign: 'center', padding: '24px' }}>
             <Statistic value={water} prefix="💧" valueStyle={{ color: '#fff', fontSize: 36, fontWeight: 900 }} title={<Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Nước còn lại</Text>} />
-          </Card>
+          </div>
         </Col>
         <Col span={8}>
-          <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #FF6B6B, #FF8E53)', textAlign: 'center' }}>
+          <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #FF6B6B, #FF8E53)', textAlign: 'center', padding: '24px' }}>
             <Statistic value={profile?.current_xp || 0} prefix={<ThunderboltOutlined />} valueStyle={{ color: '#fff', fontSize: 36, fontWeight: 900 }} title={<Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>XP hiện tại</Text>} />
-          </Card>
+          </div>
         </Col>
         <Col span={8}>
-          <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #C13584, #833AB4)', textAlign: 'center' }}>
+          <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #C13584, #833AB4)', textAlign: 'center', padding: '24px' }}>
             <Statistic value={tree.growth_stage} suffix="/5" valueStyle={{ color: '#fff', fontSize: 36, fontWeight: 900 }} title={<Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Giai đoạn</Text>} />
-          </Card>
+          </div>
         </Col>
       </Row>
 

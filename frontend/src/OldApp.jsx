@@ -45,6 +45,16 @@ const getVNYesterdayStr = () => {
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
 };
 
+// Ngày đầu tuần (Thứ 2) theo múi giờ VN
+const getVNWeekStart = () => {
+  const vnDateStr = getVNDateStr();
+  const date = new Date(vnDateStr + 'T00:00:00');
+  const day = date.getDay(); // 0=CN, 1=T2, ...
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return date.toISOString().split('T')[0];
+};
+
 const QUEST_POOL = [
   { id: 'tasks_1',     label: 'Hoàn thành 1 task hôm nay',  type: 'tasks',    target: 1,  xp: 15,  icon: '✅' },
   { id: 'tasks_3',     label: 'Hoàn thành 3 task hôm nay',  type: 'tasks',    target: 3,  xp: 30,  icon: '✅' },
@@ -52,8 +62,9 @@ const QUEST_POOL = [
   { id: 'deepwork_15', label: 'Deep Work 15 phút hôm nay',  type: 'deepwork', target: 15, xp: 20,  icon: '⏱️' },
   { id: 'deepwork_30', label: 'Deep Work 30 phút hôm nay',  type: 'deepwork', target: 30, xp: 40,  icon: '⏱️' },
   { id: 'deepwork_60', label: 'Deep Work 60 phút hôm nay',  type: 'deepwork', target: 60, xp: 80,  icon: '⏱️' },
-  { id: 'streak_3',    label: 'Duy trì streak 3 ngày',       type: 'streak',   target: 3,  xp: 25,  icon: '🔥' },
-  { id: 'streak_7',    label: 'Duy trì streak 7 ngày',       type: 'streak',   target: 7,  xp: 50,  icon: '🔥' },
+  { id: 'water_1',     label: 'Tưới cây 1 lần hôm nay',    type: 'water',    target: 1,  xp: 10,  icon: '🌿' },
+  { id: 'water_3',     label: 'Tưới cây 3 lần hôm nay',    type: 'water',    target: 3,  xp: 25,  icon: '🌿' },
+  { id: 'water_5',     label: 'Tưới cây 5 lần hôm nay',    type: 'water',    target: 5,  xp: 40,  icon: '🌿' },
 ];
 
 const generateDailyQuests = (dateStr) => {
@@ -72,7 +83,7 @@ export default function App() {
   const { user, profile, signOut, updateProfile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [tasks, setTasks] = useState([]);
-  const [input, setInput] = useState({ name: '', day: getTodayVN(), note: '', priority: 'Medium', deadline: null });
+  const [input, setInput] = useState({ name: '', day: getTodayVN(), note: '', priority: 'Medium', deadline: null, is_recurring: false });
   const [quickInput, setQuickInput] = useState('');
   const [quickDeadline, setQuickDeadline] = useState(null);
   const [activeKey, setActiveKey] = useState('1');
@@ -91,6 +102,7 @@ export default function App() {
   const [xpFlash, setXpFlash] = useState(false);
   const [floatingXps, setFloatingXps] = useState([]);
   const [recentlyCompleted, setRecentlyCompleted] = useState(new Set());
+  const rewardingTaskIds = useRef(new Set()); // Lock đồng bộ chống spam click
 
   // ─── ANIMATION HELPERS ────────────────────────────────────────────────────
   const calcLevel = (xp) => Math.max(1, Math.floor(Math.log2(xp / 50 + 1)) + 1);
@@ -208,6 +220,28 @@ export default function App() {
   const audioCtxRef = useRef(null);
   const audioSourceRef = useRef(null);
 
+  const checkWeeklyReset = async () => {
+    const weekStart = getVNWeekStart();
+    const lastReset = localStorage.getItem('weekly_reset_date');
+    if (lastReset === weekStart) return;
+
+    // Xóa task 1 lần đã hoàn thành từ tuần trước
+    await supabase.from('tasks')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('is_recurring', false)
+      .eq('is_completed', true);
+
+    // Reset task cố định về chưa hoàn thành
+    await supabase.from('tasks')
+      .update({ is_completed: false, xp_rewarded: false })
+      .eq('user_id', user.id)
+      .eq('is_recurring', true);
+
+    localStorage.setItem('weekly_reset_date', weekStart);
+    message.info('📅 Tuần mới bắt đầu! Task cố định đã được reset 🔄');
+  };
+
   const fetchTasks = async () => {
     if (!user) return;
     setLoading(true);
@@ -278,7 +312,7 @@ export default function App() {
     switch (quest.type) {
       case 'tasks':    return Math.min(quest.target, currentTasks.filter(t => t.is_completed && t.day_of_week === getTodayVN()).length);
       case 'deepwork': return Math.min(quest.target, currentTodayLog?.deep_work_minutes || 0);
-      case 'streak':   return Math.min(quest.target, currentProfile?.streak_days || 0);
+      case 'water':    return Math.min(quest.target, parseInt(localStorage.getItem(`water_count_${getVNDateStr()}`) || '0', 10));
       default: return 0;
     }
   };
@@ -298,7 +332,7 @@ export default function App() {
     message.success(`🎯 Quest hoàn thành! +${xpReward} XP bonus!`);
   };
 
-  useEffect(() => { if (user) { requestNotificationPermission(); fetchTasks(); fetchTodayLog(); loadDailyQuests(); } }, [user]);
+  useEffect(() => { if (user) { requestNotificationPermission(); checkWeeklyReset().then(() => fetchTasks()); fetchTodayLog(); loadDailyQuests(); } }, [user]);
 
   // --- LOGIC RULE 5 GIÂY ---
   const startRule5s = () => {
@@ -317,10 +351,10 @@ export default function App() {
     }, 1000);
   };
 
-  const handleAddTask = async (name, day, note, priority, isQuick = false, deadline = null) => {
+  const handleAddTask = async (name, day, note, priority, isQuick = false, deadline = null, isRecurring = false) => {
     if (!name.trim()) return message.warning('Nhập task vào đi bro!');
     const { error } = await supabase.from('tasks').insert([
-      { Task_Name: name, day_of_week: day, description: note, priority: priority, is_completed: false, user_id: user.id, deadline: deadline || null }
+      { Task_Name: name, day_of_week: day, description: note, priority: priority, is_completed: false, user_id: user.id, deadline: deadline || null, is_recurring: isRecurring }
     ]);
 
     if (error) {
@@ -329,7 +363,7 @@ export default function App() {
     } else {
       message.success('Chốt đơn thành công! 🚀');
       if (isQuick) { setQuickInput(''); setQuickDeadline(null); }
-      else setInput({ ...input, name: '', note: '', deadline: null });
+      else setInput({ ...input, name: '', note: '', deadline: null, is_recurring: false });
       fetchTasks();
     }
   };
@@ -339,9 +373,23 @@ export default function App() {
     const { error } = await supabase.from('tasks').update({ is_completed: newStatus }).eq('id', id);
     if (error) return;
 
-    // 🎁 Thưởng khi hoàn thành task (không phạt khi bỏ tick)
+    // Chỉ thưởng XP lần đầu hoàn thành — double guard: DB flag + sync ref lock
     if (newStatus === true) {
+      const task = tasks.find(t => t.id === id);
+      // DB flag: task đã được thưởng từ trước
+      // ref lock: task đang được xử lý bởi click trước (chống spam)
+      if (task?.xp_rewarded || rewardingTaskIds.current.has(id)) {
+        fetchTasks();
+        return;
+      }
+
+      // Lock đồng bộ ngay — synchronous, chạy trước await tiếp theo
+      rewardingTaskIds.current.add(id);
+
       try {
+        // Đánh dấu đã thưởng trong DB
+        await supabase.from('tasks').update({ xp_rewarded: true }).eq('id', id);
+
         // Tính streak trước để biết multiplier
         const today = getVNDateStr();
         const lastActive = profile?.last_active_date;
@@ -400,6 +448,8 @@ export default function App() {
         });
       } catch (e) {
         console.error('Lỗi thưởng task:', e);
+      } finally {
+        rewardingTaskIds.current.delete(id);
       }
     }
 
@@ -636,7 +686,8 @@ export default function App() {
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
 
-    if (type === 'brown') {
+    // Brown noise base cho ocean và rain
+    if (type === 'ocean') {
       let lastOut = 0;
       for (let i = 0; i < bufferSize; i++) {
         const white = Math.random() * 2 - 1;
@@ -653,17 +704,31 @@ export default function App() {
     source.loop = true;
 
     const gain = ctx.createGain();
-    gain.gain.value = type === 'white' ? 0.25 : 0.35;
+    gain.gain.value = 0.35;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
 
     if (type === 'rain') {
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass';
       filter.frequency.value = 600;
       source.connect(filter);
       filter.connect(gain);
+    } else if (type === 'ocean') {
+      filter.frequency.value = 350;
+      source.connect(filter);
+      filter.connect(gain);
+      // LFO tạo nhịp sóng
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.frequency.value = 0.12;
+      lfoGain.gain.value = 0.25;
+      lfo.connect(lfoGain);
+      lfoGain.connect(gain.gain);
+      lfo.start();
     } else {
       source.connect(gain);
     }
+
     gain.connect(ctx.destination);
     source.start();
 
@@ -686,19 +751,19 @@ export default function App() {
             {/* STATS RỰC RỠ NHƯ BẢN ĐẦU */}
             <Row gutter={[24, 24]}>
               <Col xs={24} md={8}>
-                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%)' }}>
+                <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%)', padding: '24px' }}>
                   <Statistic title={<Text style={{color: 'rgba(255,255,255,0.9)', fontWeight: 600}}>Tổng Task</Text>} value={tasks.length} valueStyle={{color: '#fff', fontSize: 40, fontWeight: '900'}} prefix={<StarFilled />} />
-                </Card>
+                </div>
               </Col>
               <Col xs={24} md={8}>
-                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #4ECDC4 0%, #556270 100%)' }}>
+                <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #4ECDC4 0%, #556270 100%)', padding: '24px' }}>
                   <Statistic title={<Text style={{color: 'rgba(255,255,255,0.9)', fontWeight: 600}}>Tiến độ hoàn thành</Text>} value={progressPercent} valueStyle={{color: '#fff', fontSize: 40, fontWeight: '900'}} suffix="%" />
-                </Card>
+                </div>
               </Col>
               <Col xs={24} md={8}>
-                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #C13584 0%, #833AB4 100%)' }}>
+                <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #C13584 0%, #833AB4 100%)', padding: '24px' }}>
                   <Statistic title={<Text style={{color: 'rgba(255,255,255,0.9)', fontWeight: 600}}>Chuỗi On Fire 🔥</Text>} value={profile?.streak_days || 0} valueStyle={{color: '#fff', fontSize: 40, fontWeight: '900'}} suffix="ngày" />
-                </Card>
+                </div>
               </Col>
             </Row>
 
@@ -784,6 +849,7 @@ export default function App() {
                       <div style={{color: 'var(--text-secondary)', fontSize: 12}}>{item.description}</div>
                     </Checkbox>
                     <Space size={6}>
+                      {item.is_recurring && <Tag color="cyan" style={{ borderRadius: 12, fontWeight: 600, fontSize: 11 }}>🔁 Cố định</Tag>}
                       {(() => { const info = getDeadlineInfo(item.deadline); return info ? <Tag style={{ borderRadius: 12, fontWeight: 600, fontSize: 11, color: info.color, borderColor: info.color, background: `${info.color}18` }}>📅 {info.label}</Tag> : null; })()}
                       <Tag color={item.priority === 'High' ? 'red' : 'blue'} style={{borderRadius: 20, fontWeight: 'bold'}}>{item.priority}</Tag>
                     </Space>
@@ -813,7 +879,12 @@ export default function App() {
                 </Col>
                 <Col span={12}><Input size="large" placeholder="Ghi chú thêm..." value={input.note} onChange={e => setInput({...input, note: e.target.value})} /></Col>
                 <Col span={6}><DatePicker size="large" style={{ width: '100%' }} placeholder="Deadline (tùy chọn)" value={input.deadline} onChange={v => setInput({...input, deadline: v})} /></Col>
-                <Col span={6}><Button type="primary" size="large" block style={{background: '#4ECDC4', border: 'none', borderRadius: 12}} onClick={() => handleAddTask(input.name, input.day, input.note, input.priority, false, input.deadline ? input.deadline.format('YYYY-MM-DD') : null)}>+ Thêm Lịch</Button></Col>
+                <Col span={6} style={{ display: 'flex', alignItems: 'center' }}>
+                  <Checkbox checked={input.is_recurring} onChange={e => setInput({...input, is_recurring: e.target.checked})}>
+                    <Text style={{ color: 'var(--text-primary)', fontWeight: 600 }}>🔁 Lặp lại hàng tuần</Text>
+                  </Checkbox>
+                </Col>
+                <Col span={24}><Button type="primary" size="large" block style={{background: '#4ECDC4', border: 'none', borderRadius: 12}} onClick={() => handleAddTask(input.name, input.day, input.note, input.priority, false, input.deadline ? input.deadline.format('YYYY-MM-DD') : null, input.is_recurring)}>+ Thêm Lịch</Button></Col>
               </Row>
             </div>
             <Timeline mode="left" items={['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ Nhật'].map(day => ({
@@ -827,6 +898,7 @@ export default function App() {
                       <div key={t.id} style={{background: 'var(--bg-surface-2)', padding: '10px 14px', borderRadius: 12, border: `1px solid ${dlInfo && !t.is_completed ? dlInfo.color + '60' : 'var(--border-color)'}`, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                         <Checkbox checked={t.is_completed} onChange={() => toggleComplete(t.id, t.is_completed)}>
                           <Text delete={t.is_completed} style={{ color: t.is_completed ? 'var(--text-muted)' : 'var(--text-primary)' }}>{t.Task_Name}</Text>
+                          {t.is_recurring && <Tag color="cyan" style={{ marginLeft: 6, fontSize: 11, borderRadius: 8 }}>🔁 Cố định</Tag>}
                           {dlInfo && !t.is_completed && <div style={{ fontSize: 11, color: dlInfo.color, fontWeight: 600, marginTop: 2 }}>📅 {dlInfo.label}</div>}
                         </Checkbox>
                         <Button type="text" danger icon={<DeleteOutlined />} onClick={() => deleteTask(t.id)} />
@@ -892,23 +964,19 @@ export default function App() {
             <div style={{ maxWidth: 600, margin: '24px auto 0' }}>
               <Card style={{ ...cardStyle, textAlign: 'center' }}>
                 <Text style={{ fontWeight: 700, fontSize: 15, display: 'block', marginBottom: 16 }}><SoundOutlined /> Nhạc nền tập trung</Text>
-                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: currentSound === 'lofi' ? 16 : 0 }}>
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
                   {[
-                    { key: 'rain',  label: '🌧 Mưa',        color: '#4ECDC4' },
-                    { key: 'white', label: '⬜ White Noise', color: '#aaa' },
-                    { key: 'brown', label: '🌊 Brown Noise', color: '#8B6914' },
-                    { key: 'lofi',  label: '🎵 Lo-fi',       color: '#C13584' },
+                    { key: 'rain',  label: '🌧 Mưa',    color: '#4ECDC4' },
+                    { key: 'ocean', label: '🌊 Sóng biển', color: '#2980B9' },
+                    { key: 'fire',  label: '🔥 Lửa',    color: '#E67E22' },
+                    { key: 'lofi',  label: '🎵 Lo-fi',  color: '#C13584' },
                   ].map(({ key, label, color }) => (
                     <Button
                       key={key}
                       shape="round"
                       onClick={() => {
-                        if (key === 'lofi') {
-                          if (currentSound === 'lofi') { stopSound(); }
-                          else { stopSound(); setCurrentSound('lofi'); }
-                        } else {
-                          playNoise(key);
-                        }
+                        if (currentSound === key) { stopSound(); }
+                        else { stopSound(); setCurrentSound(key); }
                       }}
                       style={{
                         fontWeight: 700,
@@ -924,15 +992,11 @@ export default function App() {
                     <Button shape="round" danger icon={<StopOutlined />} onClick={stopSound}>Dừng</Button>
                   )}
                 </div>
-                {currentSound === 'lofi' && (
-                  <iframe
-                    style={{ display: 'none' }}
-                    src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1"
-                    allow="autoplay"
-                    title="lofi"
-                  />
-                )}
-                {currentSound && currentSound !== 'lofi' && (
+                {currentSound === 'lofi'  && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1" allow="autoplay" title="lofi" />}
+                {currentSound === 'fire'  && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/L_LUpnjgPso?autoplay=1" allow="autoplay" title="fire" />}
+                {currentSound === 'rain'  && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/nDq6TstdEi8?autoplay=1" allow="autoplay" title="rain" />}
+                {currentSound === 'ocean' && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/WHPEKLQID4U?autoplay=1" allow="autoplay" title="ocean" />}
+                {currentSound && (
                   <Text style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 8, display: 'block' }}>
                     Đang phát — nhấn lại nút hoặc "Dừng" để tắt
                   </Text>
@@ -943,22 +1007,22 @@ export default function App() {
             {/* STATS POMODORO */}
             <Row gutter={[16, 16]} style={{ marginTop: 24, maxWidth: 800, margin: '24px auto 0' }}>
               <Col xs={24} sm={8}>
-                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', textAlign: 'center' }}>
+                <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', textAlign: 'center', padding: '24px' }}>
                   <div style={{ fontSize: 36, fontWeight: 900, color: '#fff' }}>{pomoSessions + (profile?.pomo_sessions || 0)}</div>
                   <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 4 }}>🍅 Phiên hôm nay</div>
-                </Card>
+                </div>
               </Col>
               <Col xs={24} sm={8}>
-                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #95E1D3 0%, #4ECDC4 100%)', textAlign: 'center' }}>
+                <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #95E1D3 0%, #4ECDC4 100%)', textAlign: 'center', padding: '24px' }}>
                   <div style={{ fontSize: 36, fontWeight: 900, color: '#fff' }}>{profile?.deep_work_minutes || 0}</div>
                   <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 4 }}>⏱️ Tổng phút deep work</div>
-                </Card>
+                </div>
               </Col>
               <Col xs={24} sm={8}>
-                <Card style={{ ...cardStyle, background: 'linear-gradient(135deg, #F7C948 0%, #FF9F1C 100%)', textAlign: 'center' }}>
+                <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #F7C948 0%, #FF9F1C 100%)', textAlign: 'center', padding: '24px' }}>
                   <div style={{ fontSize: 36, fontWeight: 900, color: '#fff' }}>{Math.round((profile?.deep_work_minutes || 0) * 2)}</div>
                   <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 4 }}>⚡ XP từ Focus</div>
-                </Card>
+                </div>
               </Col>
             </Row>
           </div>
@@ -1144,20 +1208,23 @@ export default function App() {
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
           {[
-            { key: 'rain',  label: '🌧 Mưa',  color: '#4ECDC4' },
-            { key: 'white', label: '⬜ White', color: '#aaa' },
-            { key: 'brown', label: '🌊 Brown', color: '#8B6914' },
-            { key: 'lofi',  label: '🎵 Lo-fi', color: '#C13584' },
+            { key: 'rain',  label: '🌧 Mưa',   color: '#4ECDC4' },
+            { key: 'ocean', label: '🌊 Sóng biển', color: '#2980B9' },
+            { key: 'fire',  label: '🔥 Lửa',   color: '#E67E22' },
+            { key: 'lofi',  label: '🎵 Lo-fi',  color: '#C13584' },
           ].map(({ key, label, color }) => (
             <Button key={key} shape="round" size="small"
-              onClick={() => { if (key === 'lofi') { if (currentSound === 'lofi') stopSound(); else { stopSound(); setCurrentSound('lofi'); } } else { playNoise(key); } }}
+              onClick={() => { if (currentSound === key) stopSound(); else { stopSound(); setCurrentSound(key); } }}
               style={{ fontWeight: 700, background: currentSound === key ? color : 'rgba(255,255,255,0.06)', color: currentSound === key ? '#fff' : 'rgba(255,255,255,0.55)', border: `1px solid ${currentSound === key ? color : 'rgba(255,255,255,0.15)'}` }}
             >{label}</Button>
           ))}
           {currentSound && <Button shape="round" size="small" danger icon={<StopOutlined />} onClick={stopSound}>Dừng</Button>}
         </div>
 
-        {currentSound === 'lofi' && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1" allow="autoplay" title="lofi" />}
+        {currentSound === 'lofi'  && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1" allow="autoplay" title="lofi" />}
+        {currentSound === 'fire'  && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/L_LUpnjgPso?autoplay=1" allow="autoplay" title="fire" />}
+        {currentSound === 'rain'  && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/nDq6TstdEi8?autoplay=1" allow="autoplay" title="rain" />}
+        {currentSound === 'ocean' && <iframe style={{ display: 'none' }} src="https://www.youtube.com/embed/WHPEKLQID4U?autoplay=1" allow="autoplay" title="ocean" />}
 
         <Modal open={showRule5s} footer={null} closable={false} centered>
           <div style={{ textAlign: 'center', padding: '40px 0' }}>

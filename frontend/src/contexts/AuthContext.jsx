@@ -24,6 +24,7 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null); // User profile từ database
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
+  const [hasTree, setHasTree] = useState(null); // null = chưa check, false = chưa có cây, true = có cây
 
   // Load user khi app khởi động
   useEffect(() => {
@@ -66,6 +67,7 @@ export const AuthProvider = ({ children }) => {
         await loadProfile(session.user.id);
       } else {
         setProfile(null);
+        setHasTree(null);
         setLoading(false);
       }
     });
@@ -118,12 +120,25 @@ export const AuthProvider = ({ children }) => {
           ], { onConflict: 'user_id,item_type', ignoreDuplicates: true });
         }
       }
+
+      // Kiểm tra user đã có cây chưa
+      const { data: treeData, error: treeError } = await supabase
+        .from('trees')
+        .select('id')
+        .eq('user_id', userId)
+        .limit(1);
+      // Nếu query lỗi → default true (an toàn, không block user vào app)
+      setHasTree(treeError ? true : treeData && treeData.length > 0);
     } catch (error) {
       console.error('Error loading profile:', error.message);
+      setHasTree(true); // Default true để không block user khi lỗi mạng
     } finally {
       setLoading(false);
     }
   };
+
+  // Đánh dấu user đã có cây (gọi sau khi tạo cây xong)
+  const completeTreeSetup = () => setHasTree(true);
 
   // ĐĂNG KÝ với email/password
   const signUp = async (email, password, username) => {
@@ -211,6 +226,7 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setProfile(null);
       setSession(null);
+      setHasTree(null);
     }
     return { error };
   };
@@ -253,11 +269,13 @@ export const AuthProvider = ({ children }) => {
     profile,
     session,
     loading,
+    hasTree,
     signUp,
     signIn,
     signInWithGoogle,
     signOut,
     updateProfile,
+    completeTreeSetup,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
