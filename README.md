@@ -1,120 +1,98 @@
-# 🎯 STUDENT HUB - Hệ thống chống trì hoãn cho sinh viên
+# Student Hub — Hệ thống hỗ trợ học tập cho sinh viên
 
-## 🚀 CÀI ĐẶT VÀ CHẠY PROJECT
+Ứng dụng web giúp sinh viên chống trì hoãn và duy trì thói quen học tập thông qua gamification. Người dùng quản lý nhiệm vụ hàng ngày, học tập tập trung theo Pomodoro, và nhận phần thưởng XP để nuôi cây ảo — tạo thành vòng lặp động lực liên tục.
 
-### Bước 1: Clone project (nếu chưa có)
+---
+
+## Tính năng chính
+
+**Dashboard** — Tổng quan tiến trình trong ngày: danh sách task hôm nay, chuỗi ngày học liên tiếp (streak), điểm XP hiện tại, và 3 Daily Quest ngẫu nhiên thay mới mỗi ngày.
+
+**Lịch học** — Quản lý task theo từng ngày trong tuần. Hỗ trợ gắn deadline với cảnh báo sắp hết hạn / quá hạn. Hoàn thành task nhận +15 XP và +1 giọt nước.
+
+**Deep Work** — Bộ đếm Pomodoro tùy chỉnh thời gian, nhạc nền tập trung, và Focus Mode toàn màn hình ẩn toàn bộ giao diện — chỉ hiển thị đồng hồ và nhạc.
+
+**Cây ảo** — Mỗi người dùng chọn một loài cây khi đăng ký (Hoa Anh Đào, Cây Táo, Cây Dừa, Tre). Cây lớn qua 5 giai đoạn dựa trên tổng XP tích lũy. Dùng nước kiếm được từ việc học để tưới cây mỗi ngày.
+
+**Thành tích** — Lưu lại các cột mốc: task đầu tiên, streak nhiều ngày, hoàn thành Deep Work, v.v.
+
+**Hồ sơ & Bạn bè** — Theo dõi cấp độ, tổng XP, thống kê học tập. Kết bạn qua mã friend code để cùng thi đua.
+
+---
+
+## Hệ thống Gamification
+
+- **XP**: +15 XP / task hoàn thành, +2 XP / phút Deep Work, +10 XP / lần tưới cây
+- **Streak bonus**: ×1.2 (3–6 ngày), ×1.5 (7–13 ngày), ×1.8 (14–29 ngày), ×2.0 (≥30 ngày)
+- **Level**: tính theo `floor(log2(current_xp / 50 + 1)) + 1`
+- **Giai đoạn cây**: `min(5, floor(total_xp / 200) + 1)` — 5 giai đoạn từ hạt mầm đến trưởng thành
+- **Daily Quest**: 3 nhiệm vụ ngẫu nhiên mỗi ngày (hoàn thành task, học Deep Work, tưới cây), reset lúc nửa đêm
+
+---
+
+## Tech Stack
+
+| Lớp | Công nghệ |
+|-----|-----------|
+| Frontend | React 18 + Vite |
+| UI | Ant Design 5 |
+| Backend / DB | Supabase (PostgreSQL + Auth) |
+| Hosting | Vercel |
+| Styling | CSS custom variables + Ant Design themes |
+
+---
+
+## Cài đặt và chạy
+
+### Yêu cầu
+- Node.js 18+
+- Tài khoản Supabase (tạo project và lấy API keys)
+
+### Bước 1: Clone và cài dependencies
 ```bash
-# Nếu mày đã có folder rồi thì skip bước này
-git clone <repository-url>
-cd WebHoTroSvienTriHoanHocTap
-```
-
-### Bước 2: Cài dependencies
-```bash
-cd frontend
+git clone https://github.com/vietanhx9/StudentHub.git
+cd WebHoTroSvienTriHoanHocTap/frontend
 npm install
 ```
 
-### Bước 3: Setup môi trường
-File `.env.local` đã được tạo sẵn với Supabase credentials.
-**LƯU Ý**: File này không được push lên GitHub (đã có trong .gitignore)
+### Bước 2: Cấu hình môi trường
+Tạo file `frontend/.env.local`:
+```
+VITE_SUPABASE_URL=https://<project-id>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon-key>
+```
 
-### Bước 4: Chạy development server
+### Bước 3: Chạy dev server
 ```bash
 npm run dev
 ```
 
-App sẽ chạy tại: `http://localhost:5173`
+App chạy tại `http://localhost:5173`
 
 ---
 
-## 📦 TECH STACK
+## Cấu trúc Database (Supabase)
 
-- **Frontend**: React 18 + Vite
-- **UI Library**: Ant Design 5
-- **Backend**: Supabase (PostgreSQL + Authentication)
-- **Styling**: CSS custom + Ant Design themes
+| Table | Mô tả |
+|-------|-------|
+| `users` | Profile người dùng (XP, level, streak, friend_code) |
+| `tasks` | Nhiệm vụ học tập (theo ngày, có deadline) |
+| `trees` | Cây ảo của người dùng (loại cây, giai đoạn) |
+| `inventory` | Kho đồ (water, golden_water, booster, seed) |
+| `achievements` | Thành tích đã đạt được |
+| `friendships` | Quan hệ bạn bè (pending / accepted) |
+| `daily_logs` | Nhật ký học tập mỗi ngày |
 
----
-
-## 🎮 TÍNH NĂNG ĐÃ CÓ
-
-### V1 (MVP Cũ):
-- ✅ Quản lý task theo ngày
-- ✅ Pomodoro Timer (5/15/25/50 phút)
-- ✅ Rule 5 giây chống trì hoãn
-- ✅ Dashboard stats cơ bản
-
-### V2 (Mới - Authentication):
-- ✅ Đăng ký / Đăng nhập (Email/Password + Google)
-- ✅ Bảo mật với Row Level Security
-- ✅ Profile system với username + friend code
-- ✅ Chọn cây đầu tiên khi đăng ký
+Tất cả các bảng đều bật Row Level Security — người dùng chỉ đọc/sửa được dữ liệu của mình.
 
 ---
 
-## 🔜 ROADMAP
+## Xác thực
 
-### Tuần 1 (Đang làm):
-- ✅ Authentication & Security
-- 🔄 Database migration
-- 🔄 Protected routes
-
-### Tuần 2:
-- Gamification (XP, Level, Achievements)
-- Tree growth system
-- Inventory management
-
-### Tuần 3:
-- Friends system (Add by username#code + invite link)
-- Leaderboard
-- Analytics dashboard
+Hỗ trợ đăng ký / đăng nhập bằng Email + Password và Google OAuth thông qua Supabase Auth.
 
 ---
 
-## 🗄️ DATABASE SCHEMA
+## Đóng góp
 
-### Tables:
-1. **users** - Thông tin người dùng
-2. **tasks** - Nhiệm vụ (có XP reward)
-3. **trees** - Vườn cây ảo
-4. **inventory** - Kho đồ (water, seeds, boosters)
-5. **achievements** - Thành tựu
-6. **friendships** - Quan hệ bạn bè
-7. **friend_invites** - Link mời
-8. **xp_logs** - Lịch sử XP
-
-Chi tiết xem file: `supabase_setup.sql`
-
----
-
-## 🔐 BẢO MẬT
-
-- Environment variables được lưu trong `.env.local` (không commit lên Git)
-- Row Level Security (RLS) enabled cho tất cả tables
-- User chỉ có thể đọc/sửa data của mình
-- Supabase Auth handles JWT tokens tự động
-
----
-
-## 🐛 GỠ LỖI THƯỜNG GẶP
-
-### Lỗi: "Missing Supabase credentials"
-→ Kiểm tra file `.env.local` có tồn tại không
-→ Restart dev server: `npm run dev`
-
-### Lỗi: "Failed to fetch"
-→ Kiểm tra internet connection
-→ Kiểm tra Supabase project có đang chạy không
-
-### Lỗi khi login với Google
-→ Vào Supabase Dashboard → Authentication → Providers
-→ Enable Google provider
-
----
-
-## 📞 CONTACT
-
-Nếu gặp vấn đề, liên hệ team dev.
-
-Happy coding! 🚀
+Pull request và issue đều được hoan nghênh.

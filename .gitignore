@@ -15,3 +15,7 @@ Thumbs.db
 
 # VS Code
 .vscode/
+
+# AI/Dev instructions (internal only)
+CLAUDE.md
+thuyet-trinh.md
