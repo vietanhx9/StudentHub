@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Card, Avatar, Typography, Button, Tag, Progress, Divider, Row, Col, Input, message, Form, Upload } from 'antd';
-import { UserOutlined, MailOutlined, CopyOutlined, EditOutlined, LogoutOutlined, SaveOutlined, CloseOutlined, TrophyOutlined, StarFilled, CameraOutlined } from '@ant-design/icons';
+import { UserOutlined, MailOutlined, CopyOutlined, EditOutlined, LogoutOutlined, SaveOutlined, CloseOutlined, TrophyOutlined, StarFilled, CameraOutlined, ExperimentOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
+import QuizPage, { GROUPS } from './QuizPage';
 
 const { Title, Text } = Typography;
 
@@ -32,11 +33,17 @@ const LEVEL_NAMES = ['', 'Mầm non 🌱', 'Học sinh 📚', 'Sinh viên 🎓',
 export default function ProfilePage() {
   const { user, profile, signOut, updateProfile } = useAuth();
   const [editing, setEditing] = useState(false);
+  const [showQuiz, setShowQuiz] = useState(false);
   const [form] = Form.useForm();
+
+  if (showQuiz) {
+    return <QuizPage onBack={() => setShowQuiz(false)} />;
+  }
 
   const xp = profile?.current_xp || 0;
   const level = getLevel(xp);
   const xpInfo = getXpToNext(xp);
+  const userGroup = profile?.procrastination_group ? GROUPS[profile.procrastination_group] : null;
   const handleAvatarUpload = (file) => {
     const isImage = file.type.startsWith('image/');
     if (!isImage) {
@@ -161,6 +168,53 @@ export default function ProfilePage() {
           Còn {xpInfo.needed - xpInfo.current} XP nữa để lên Lv.{level + 1} ({LEVEL_NAMES[level + 1] || 'MAX'})
         </Text>
       </Card>
+
+      {/* MỨC ĐỘ TRÌ HOÃN */}
+      {userGroup ? (
+        <Card style={{ ...cardStyle, marginBottom: 24, background: userGroup.gradient, color: '#fff' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <div style={{ fontSize: 56, lineHeight: 1 }}>{userGroup.emoji}</div>
+            <div style={{ flex: 1 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
+                MỨC ĐỘ TRÌ HOÃN CỦA BẠN
+              </Text>
+              <Title level={4} style={{ margin: '4px 0', color: '#fff', fontWeight: 900 }}>
+                {userGroup.name}
+              </Title>
+              <Tag style={{ borderRadius: 20, fontWeight: 700, fontSize: 12, background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff' }}>
+                {userGroup.range}
+              </Tag>
+            </div>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => setShowQuiz(true)}
+              style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', borderRadius: 10, fontWeight: 600, height: 40 }}
+            >
+              Làm lại
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <Card style={{ ...cardStyle, marginBottom: 24, borderTop: '6px solid #667eea' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ fontSize: 48, lineHeight: 1 }}>🧪</div>
+            <div style={{ flex: 1 }}>
+              <Title level={5} style={{ margin: 0, marginBottom: 4 }}>Kiểm tra mức độ trì hoãn</Title>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                8 câu hỏi nhanh để hiểu phong cách học tập của bạn và nhận gợi ý phù hợp
+              </Text>
+            </div>
+            <Button
+              type="primary"
+              icon={<ExperimentOutlined />}
+              onClick={() => setShowQuiz(true)}
+              style={{ borderRadius: 10, fontWeight: 700, height: 44, background: 'linear-gradient(135deg, #667eea, #764ba2)', border: 'none' }}
+            >
+              Làm quiz
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* FRIEND CODE + LOGOUT */}
       <Row gutter={16}>
