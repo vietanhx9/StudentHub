@@ -3,6 +3,7 @@ import { Card, Button, Progress, Tag, Statistic, Row, Col, Typography, message, 
 import { ThunderboltOutlined, TrophyOutlined, GiftOutlined } from '@ant-design/icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -61,6 +62,8 @@ function CollectionSection({ collection, cardStyle }) {
 
 export default function TreePage() {
   const { user, profile, updateProfile } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [tree, setTree] = useState(null);
   const [water, setWater] = useState(0);
   const [seeds, setSeeds] = useState(0);
@@ -68,6 +71,7 @@ export default function TreePage() {
   const [collection, setCollection] = useState([]);
   const [loading, setLoading] = useState(true);
   const [watering, setWatering] = useState(false);
+  const [waterAnim, setWaterAnim] = useState(false);
   const [harvesting, setHarvesting] = useState(false);
   const [planting, setPlanting] = useState(false);
   const [usingFruit, setUsingFruit] = useState(null);
@@ -134,6 +138,8 @@ export default function TreePage() {
     if (water <= 0) return message.warning('Hết nước rồi! Hãy hoàn thành task để kiếm thêm 💧');
     if (!tree) return;
     setWatering(true);
+    setWaterAnim(true);
+    setTimeout(() => setWaterAnim(false), 1100);
     try {
       const newXp = (profile?.current_xp || 0) + 10;
       const newTotal = (profile?.total_xp || 0) + 10;
@@ -369,24 +375,23 @@ export default function TreePage() {
           return (
             <Col key={type} xs={24} sm={12}>
               <div style={{
-                background: dim ? 'var(--bg-secondary, #f7f7f7)' : info.gradient,
-                border: dim ? '1px solid var(--border-color, rgba(0,0,0,0.06))' : 'none',
+                background: dim ? (isDark ? '#2a2a3a' : '#f0f0f0') : info.gradient,
+                border: dim ? `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}` : 'none',
                 borderRadius: 16, padding: '14px 16px',
-                opacity: dim ? 0.85 : 1,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                   <div style={{ fontSize: 36, lineHeight: 1 }}>{info.emoji}</div>
                   <div style={{ flex: 1 }}>
-                    <Text style={{ color: dim ? 'var(--text-primary)' : '#fff', fontWeight: 700, fontSize: 14, display: 'block' }}>
+                    <Text style={{ color: dim ? (isDark ? '#e0e0e0' : '#1a1a1a') : '#fff', fontWeight: 700, fontSize: 14, display: 'block' }}>
                       {info.name}
                     </Text>
-                    <Text style={{ color: dim ? 'var(--text-secondary)' : 'rgba(255,255,255,0.85)', fontSize: 11 }}>
+                    <Text style={{ color: dim ? (isDark ? '#aaaaaa' : '#595959') : 'rgba(255,255,255,0.85)', fontSize: 11 }}>
                       {info.effect}
                     </Text>
                   </div>
                   <Tag style={{
-                    background: dim ? 'var(--bg-primary, rgba(0,0,0,0.05))' : 'rgba(255,255,255,0.3)',
-                    border: 'none', color: dim ? 'var(--text-primary)' : '#fff',
+                    background: dim ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)') : 'rgba(255,255,255,0.3)',
+                    border: 'none', color: dim ? (isDark ? '#e0e0e0' : '#1a1a1a') : '#fff',
                     fontWeight: 700, borderRadius: 12,
                   }}>×{qty}</Tag>
                 </div>
@@ -395,14 +400,14 @@ export default function TreePage() {
                     size="small" block disabled={qty <= 0}
                     loading={usingFruit === type}
                     onClick={() => handleUseFruit(type)}
-                    style={{ borderRadius: 10, fontWeight: 600, height: 32, background: dim ? undefined : '#fff', border: 'none', color: dim ? undefined : info.color }}
+                    style={{ borderRadius: 10, fontWeight: 600, height: 32, background: dim ? (isDark ? 'rgba(255,255,255,0.08)' : '#fff') : '#fff', border: dim ? `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}` : 'none', color: dim ? (isDark ? '#e0e0e0' : '#1a1a1a') : info.color }}
                   >
                     Dùng
                   </Button>
                   <Button
                     size="small" block disabled={qty <= 0} icon={<GiftOutlined />}
                     onClick={() => openGiftModal(type)}
-                    style={{ borderRadius: 10, fontWeight: 600, height: 32, background: dim ? undefined : 'rgba(255,255,255,0.25)', border: 'none', color: dim ? undefined : '#fff' }}
+                    style={{ borderRadius: 10, fontWeight: 600, height: 32, background: dim ? (isDark ? 'rgba(255,255,255,0.08)' : '#fff') : 'rgba(255,255,255,0.25)', border: dim ? `1px solid ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}` : 'none', color: dim ? (isDark ? '#e0e0e0' : '#1a1a1a') : '#fff' }}
                   >
                     Tặng
                   </Button>
@@ -545,9 +550,13 @@ export default function TreePage() {
   }
 
   const info = TREE_MAP[tree.tree_type] || TREE_MAP.cherry;
-  const stagePercent = Math.min(100, ((tree.growth_stage - 1) / 4) * 100);
-  const xpToNextStage = (tree.growth_stage * 200) - (profile?.total_xp || 0);
+  const totalXp = profile?.total_xp || 0;
   const isMaxStage = tree.growth_stage >= 5;
+  const stageStartXp = (tree.growth_stage - 1) * 200;
+  const stageEndXp = tree.growth_stage * 200;
+  const xpInStage = Math.max(0, totalXp - stageStartXp);
+  const stagePercent = isMaxStage ? 100 : Math.min(100, Math.round((xpInStage / 200) * 100));
+  const xpToNextStage = Math.max(0, stageEndXp - totalXp);
   const waterCount = tree.water_count || 0;
   const fruitProgress = Math.round((waterCount / FRUIT_PER_CYCLE) * 100);
 
@@ -555,12 +564,20 @@ export default function TreePage() {
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
 
       {/* HERO CARD */}
-      <Card style={{ ...cardStyle, background: info.gradient, marginBottom: 24, textAlign: 'center', padding: '20px 0' }}>
-        <div style={{ fontSize: 120, lineHeight: 1.2, marginBottom: 16, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.2))' }}>
+      <Card style={{ ...cardStyle, background: info.gradient, marginBottom: 24, textAlign: 'center', padding: '20px 0', position: 'relative', overflow: 'hidden' }}>
+        {waterAnim && (
+          <>
+            <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', fontSize: 44, lineHeight: 1, pointerEvents: 'none', zIndex: 2 }} className="water-fall">
+              💧
+            </div>
+            <div style={{ position: 'absolute', top: 'calc(50% + 28px)', left: '50%', width: 60, height: 60, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.7)', pointerEvents: 'none', zIndex: 1 }} className="splash-ring" />
+          </>
+        )}
+        <div className={waterAnim ? 'tree-shake' : ''} style={{ fontSize: 120, lineHeight: 1.2, marginBottom: 16, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.2))', display: 'inline-block', transformOrigin: 'center bottom' }}>
           {info.emoji}
         </div>
         <Title level={2} style={{ margin: 0, color: '#fff', fontWeight: 900 }}>{tree.tree_name}</Title>
-        <Tag style={{ marginTop: 8, borderRadius: 20, fontWeight: 700, fontSize: 14, background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff' }}>
+        <Tag style={{ marginTop: 8, borderRadius: 20, fontWeight: 700, fontSize: 14, background: 'rgba(0,0,0,0.25)', border: 'none', color: '#fff' }}>
           {STAGE_LABELS[tree.growth_stage] || '🌳 Trưởng thành'}
         </Tag>
         <Text style={{ display: 'block', color: 'rgba(255,255,255,0.8)', marginTop: 8, fontSize: 13 }}>
@@ -592,15 +609,20 @@ export default function TreePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
           <Text strong style={{ fontSize: 15 }}>🌱 Tăng trưởng của cây</Text>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {isMaxStage ? '🎉 Cây đã trưởng thành!' : `Cần thêm ${Math.max(0, xpToNextStage)} XP để lên giai đoạn tiếp theo`}
+            {isMaxStage ? '🎉 Cây đã trưởng thành!' : `Còn ${xpToNextStage} XP để lên giai đoạn ${tree.growth_stage + 1}`}
           </Text>
         </div>
         <Progress
           percent={stagePercent}
           strokeColor={{ '0%': info.color, '100%': '#764ba2' }}
           strokeWidth={16}
-          format={() => `Giai đoạn ${tree.growth_stage}/5`}
+          format={() => isMaxStage ? `Max ${tree.growth_stage}/5` : `${xpInStage}/200 XP`}
         />
+        {!isMaxStage && (
+          <Text style={{ display: 'block', textAlign: 'center', marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+            Giai đoạn {tree.growth_stage}/5 · {stagePercent}% đến giai đoạn kế tiếp
+          </Text>
+        )}
 
         {isMaxStage && (
           <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, background: 'rgba(250,140,22,0.08)', border: '1px solid rgba(250,140,22,0.25)' }}>

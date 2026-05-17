@@ -9,6 +9,7 @@ import { useTheme } from './contexts/ThemeContext';
 import TreePage from './components/Dashboard/TreePage';
 import AchievementsPage from './components/Dashboard/AchievementsPage';
 import ProfilePage from './components/Dashboard/ProfilePage';
+import OnboardingModal from './components/OnboardingModal';
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -180,46 +181,86 @@ export default function App() {
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [weeklySummary, setWeeklySummary] = useState(null);
   const [dailyQuests, setDailyQuests] = useState([]);
   const [todayLog, setTodayLog] = useState(null);
   const [levelUpAnim, setLevelUpAnim] = useState(null);
   const [xpFlash, setXpFlash] = useState(false);
   const [floatingXps, setFloatingXps] = useState([]);
   const [recentlyCompleted, setRecentlyCompleted] = useState(new Set());
+  const [todayTaskOrder, setTodayTaskOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`task_order_${getVNDateStr()}`)) || []; } catch { return []; }
+  });
+  const [dragId, setDragId] = useState(null);
   const rewardingTaskIds = useRef(new Set()); // Lock đồng bộ chống spam click
   const pomoInitialized = useRef(false);
 
   // ─── ANIMATION HELPERS ────────────────────────────────────────────────────
   const calcLevel = (xp) => Math.max(1, Math.floor(Math.log2(xp / 50 + 1)) + 1);
 
-  const launchConfetti = () => {
+  const launchConfetti = (opts = {}) => {
+    const { burst = false } = opts;
     const canvas = document.createElement('canvas');
     canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99999';
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     document.body.appendChild(canvas);
     const ctx = canvas.getContext('2d');
-    const colors = ['#FF6B6B','#4ECDC4','#F7C948','#C13584','#52c41a','#667eea','#fff'];
-    const particles = Array.from({ length: 140 }, () => ({
-      x: Math.random() * canvas.width, y: -20,
-      w: Math.random() * 10 + 5, h: Math.random() * 5 + 2,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      vx: (Math.random() - 0.5) * 5, vy: Math.random() * 4 + 2,
-      rot: Math.random() * 360, rotV: (Math.random() - 0.5) * 10,
-    }));
+    const colors = ['#FF6B6B','#4ECDC4','#F7C948','#C13584','#52c41a','#667eea','#FF9F1C','#fff'];
+    const count = burst ? 280 : 140;
+    const particles = [];
+    if (burst) {
+      // Two corner bursts (bottom-left + bottom-right) for celebration
+      const origins = [
+        { x: 0, y: canvas.height, angleMin: -Math.PI * 0.75, angleMax: -Math.PI * 0.25 },
+        { x: canvas.width, y: canvas.height, angleMin: -Math.PI * 0.75, angleMax: -Math.PI * 0.25 },
+      ];
+      origins.forEach(o => {
+        for (let i = 0; i < count / 2; i++) {
+          const angle = o.angleMin + Math.random() * (o.angleMax - o.angleMin);
+          const speed = Math.random() * 14 + 10;
+          particles.push({
+            x: o.x, y: o.y,
+            w: Math.random() * 12 + 6, h: Math.random() * 6 + 3,
+            shape: Math.random() < 0.3 ? 'circle' : 'rect',
+            color: colors[Math.floor(Math.random() * colors.length)],
+            vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+            rot: Math.random() * 360, rotV: (Math.random() - 0.5) * 14,
+          });
+        }
+      });
+    } else {
+      // Falling rain (default)
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: Math.random() * canvas.width, y: -20,
+          w: Math.random() * 10 + 5, h: Math.random() * 5 + 2,
+          shape: 'rect',
+          color: colors[Math.floor(Math.random() * colors.length)],
+          vx: (Math.random() - 0.5) * 5, vy: Math.random() * 4 + 2,
+          rot: Math.random() * 360, rotV: (Math.random() - 0.5) * 10,
+        });
+      }
+    }
+    const totalFrames = burst ? 200 : 220;
     let frame = 0;
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       particles.forEach(p => {
-        p.x += p.vx; p.y += p.vy; p.vy += 0.09; p.rot += p.rotV;
+        p.x += p.vx; p.y += p.vy; p.vy += 0.22; p.vx *= 0.992; p.rot += p.rotV;
         ctx.save();
         ctx.translate(p.x, p.y); ctx.rotate(p.rot * Math.PI / 180);
-        ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, 1 - frame / 200);
-        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, 1 - frame / totalFrames);
+        if (p.shape === 'circle') {
+          ctx.beginPath(); ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2); ctx.fill();
+        } else {
+          ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        }
         ctx.restore();
       });
       frame++;
-      if (frame < 220) requestAnimationFrame(animate);
+      if (frame < totalFrames) requestAnimationFrame(animate);
       else document.body.removeChild(canvas);
     };
     animate();
@@ -240,7 +281,12 @@ export default function App() {
     const oldLv = calcLevel(oldXp);
     const newLv = calcLevel(newXp);
     if (newLv > oldLv) {
-      setTimeout(() => { setLevelUpAnim(newLv); launchConfetti(); }, 400);
+      setTimeout(() => {
+        setLevelUpAnim(newLv);
+        launchConfetti({ burst: true });
+        setTimeout(() => launchConfetti({ burst: true }), 700);
+        setTimeout(() => launchConfetti(), 1400);
+      }, 400);
     }
   };
 
@@ -387,6 +433,8 @@ export default function App() {
       setDailyQuests(JSON.parse(stored));
     } else {
       Object.keys(localStorage).filter(k => k.startsWith('daily_quests_') && k !== key).forEach(k => localStorage.removeItem(k));
+      const orderKey = `task_order_${today}`;
+      Object.keys(localStorage).filter(k => k.startsWith('task_order_') && k !== orderKey).forEach(k => localStorage.removeItem(k));
       const quests = generateDailyQuests(today, group);
       localStorage.setItem(key, JSON.stringify(quests));
       setDailyQuests(quests);
@@ -419,6 +467,58 @@ export default function App() {
 
   useEffect(() => { if (user) { requestNotificationPermission(); checkWeeklyReset().then(() => fetchTasks()); fetchTodayLog(); } }, [user]);
   useEffect(() => { if (user) { loadDailyQuests(profile?.procrastination_group || null); } }, [user, profile?.procrastination_group]);
+  useEffect(() => {
+    if (!user || !profile) return;
+    const key = `onboarding_done_${user.id}`;
+    const done = localStorage.getItem(key);
+    if (!done && (profile.total_xp || 0) === 0) {
+      setShowOnboarding(true);
+    }
+  }, [user, profile]);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchWeekly = async () => {
+      const today = new Date();
+      const isMonday = today.getDay() === 1;
+      if (!isMonday) return;
+      const weekStartStr = getVNDateStr();
+      const dismissKey = `weekly_summary_dismissed_${user.id}_${weekStartStr}`;
+      if (localStorage.getItem(dismissKey)) return;
+
+      const startLast = new Date(); startLast.setDate(startLast.getDate() - 7);
+      const endLast = new Date();   endLast.setDate(endLast.getDate() - 1);
+      const from = startLast.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+      const to   = endLast.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+
+      const { data } = await supabase
+        .from('daily_logs')
+        .select('xp_earned, deep_work_minutes, tasks_done, log_date')
+        .eq('user_id', user.id)
+        .gte('log_date', from)
+        .lte('log_date', to);
+
+      if (!data || data.length === 0) return;
+      const totals = data.reduce((acc, r) => ({
+        xp: acc.xp + (r.xp_earned || 0),
+        deep: acc.deep + (r.deep_work_minutes || 0),
+        tasks: acc.tasks + (r.tasks_done || 0),
+        activeDays: acc.activeDays + ((r.tasks_done || 0) + (r.deep_work_minutes || 0) > 0 ? 1 : 0),
+      }), { xp: 0, deep: 0, tasks: 0, activeDays: 0 });
+      setWeeklySummary({ ...totals, dismissKey });
+    };
+    fetchWeekly();
+  }, [user]);
+
+  const dismissWeeklySummary = () => {
+    if (weeklySummary?.dismissKey) localStorage.setItem(weeklySummary.dismissKey, '1');
+    setWeeklySummary(null);
+  };
+
+  const closeOnboarding = () => {
+    if (user) localStorage.setItem(`onboarding_done_${user.id}`, '1');
+    setShowOnboarding(false);
+  };
   useEffect(() => {
     if (profile?.procrastination_group && !pomoInitialized.current && !isCounting) {
       const def = getDefaultPomo(profile.procrastination_group);
@@ -834,8 +934,8 @@ export default function App() {
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
 
-    // Brown noise base cho ocean và rain
-    if (type === 'ocean') {
+    // Brown noise base cho ocean và brown; white cho rain và white
+    if (type === 'ocean' || type === 'brown') {
       let lastOut = 0;
       for (let i = 0; i < bufferSize; i++) {
         const white = Math.random() * 2 - 1;
@@ -873,6 +973,10 @@ export default function App() {
       lfo.connect(lfoGain);
       lfoGain.connect(gain.gain);
       lfo.start();
+    } else if (type === 'brown') {
+      filter.frequency.value = 500;
+      source.connect(filter);
+      filter.connect(gain);
     } else {
       source.connect(gain);
     }
@@ -914,6 +1018,67 @@ export default function App() {
                 </div>
               </Col>
             </Row>
+
+            {weeklySummary && (
+              <div style={{ marginTop: 16, padding: '18px 22px', borderRadius: 16, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'relative', boxShadow: '0 8px 24px rgba(102,126,234,0.25)' }}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CloseOutlined />}
+                  onClick={dismissWeeklySummary}
+                  style={{ position: 'absolute', top: 10, right: 10, color: 'rgba(255,255,255,0.8)' }}
+                />
+                <Text style={{ color: '#fff', fontWeight: 700, fontSize: 16, display: 'block', marginBottom: 4 }}>📊 Tuần qua của bạn</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, display: 'block', marginBottom: 14 }}>
+                  Hoạt động {weeklySummary.activeDays}/7 ngày — chúc tuần mới hiệu quả!
+                </Text>
+                <Row gutter={12}>
+                  <Col span={8}>
+                    <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ color: '#fff', fontWeight: 900, fontSize: 22 }}>{weeklySummary.tasks}</div>
+                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>tasks xong</Text>
+                    </div>
+                  </Col>
+                  <Col span={8}>
+                    <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ color: '#fff', fontWeight: 900, fontSize: 22 }}>{Math.round(weeklySummary.deep / 60 * 10) / 10}h</div>
+                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>deep work</Text>
+                    </div>
+                  </Col>
+                  <Col span={8}>
+                    <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ color: '#fff', fontWeight: 900, fontSize: 22 }}>+{weeklySummary.xp}</div>
+                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>XP kiếm được</Text>
+                    </div>
+                  </Col>
+                </Row>
+              </div>
+            )}
+
+            {(() => {
+              const streak = profile?.streak_days || 0;
+              const today = getVNDateStr();
+              const lastActive = profile?.last_active_date;
+              const atRisk = streak > 0 && lastActive !== today;
+              if (!atRisk) return null;
+              const hour = new Date().getHours();
+              const hasShield = !!profile?.streak_shield;
+              const urgent = hour >= 18;
+              const color = hasShield ? '#722ed1' : urgent ? '#f5222d' : '#fa8c16';
+              const bg = hasShield ? 'rgba(114,46,209,0.10)' : urgent ? 'rgba(245,34,45,0.10)' : 'rgba(250,140,22,0.10)';
+              const icon = hasShield ? '🛡️' : urgent ? '🚨' : '⚠️';
+              const title = hasShield
+                ? `Streak ${streak} ngày được bảo vệ — bạn có Khiên Streak`
+                : urgent
+                  ? `Streak ${streak} ngày sắp mất! Hoàn thành 1 task ngay để giữ chuỗi`
+                  : `Streak ${streak} ngày đang chờ — hãy hoàn thành 1 task hôm nay để duy trì`;
+              return (
+                <div style={{ marginTop: 16, padding: '12px 20px', borderRadius: 14, background: bg, border: `1px solid ${color}55`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Text style={{ fontSize: 22 }}>{icon}</Text>
+                  <Text style={{ fontWeight: 700, color: color, fontSize: 14, flex: 1 }}>{title}</Text>
+                </div>
+              );
+            })()}
 
             {(() => {
               const streak = profile?.streak_days || 0;
@@ -1004,27 +1169,64 @@ export default function App() {
                 </div>
               )}
               
-              <List
-                loading={loading}
-                dataSource={tasks.filter(t => t.day_of_week === getTodayVN())}
-                renderItem={item => (
-                  <List.Item
-                    actions={[<Button type="text" danger icon={<DeleteOutlined />} onClick={() => deleteTask(item.id)} />]}
-                    className={recentlyCompleted.has(item.id) ? 'task-complete-anim' : ''}
-                    style={{ background: 'var(--bg-surface-2)', marginBottom: 12, borderRadius: 16, padding: '16px 20px', border: '2px solid var(--border-color)', transition: 'all 0.3s' }}
-                  >
-                    <Checkbox checked={item.is_completed} onChange={() => toggleComplete(item.id, item.is_completed)}>
-                      <Text delete={item.is_completed} strong style={{fontSize: 16, color: item.is_completed ? 'var(--text-muted)' : 'var(--text-primary)'}}>{item.Task_Name}</Text>
-                      <div style={{color: 'var(--text-secondary)', fontSize: 12}}>{item.description}</div>
-                    </Checkbox>
-                    <Space size={6}>
-                      {item.is_recurring && <Tag color="cyan" style={{ borderRadius: 12, fontWeight: 600, fontSize: 11 }}>🔁 Cố định</Tag>}
-                      {(() => { const info = getDeadlineInfo(item.deadline); return info ? <Tag style={{ borderRadius: 12, fontWeight: 600, fontSize: 11, color: info.color, borderColor: info.color, background: `${info.color}18` }}>📅 {info.label}</Tag> : null; })()}
-                      <Tag color={item.priority === 'High' ? 'red' : 'blue'} style={{borderRadius: 20, fontWeight: 'bold'}}>{item.priority}</Tag>
-                    </Space>
-                  </List.Item>
-                )}
-              />
+              {(() => {
+                const rawToday = tasks.filter(t => t.day_of_week === getTodayVN());
+                const orderMap = new Map(todayTaskOrder.map((id, i) => [id, i]));
+                const orderedToday = [...rawToday].sort((a, b) => {
+                  const ai = orderMap.has(a.id) ? orderMap.get(a.id) : 1e9;
+                  const bi = orderMap.has(b.id) ? orderMap.get(b.id) : 1e9;
+                  if (ai !== bi) return ai - bi;
+                  return rawToday.indexOf(a) - rawToday.indexOf(b);
+                });
+                const persistOrder = (ids) => {
+                  setTodayTaskOrder(ids);
+                  try { localStorage.setItem(`task_order_${getVNDateStr()}`, JSON.stringify(ids)); } catch {}
+                };
+                const onDragOverItem = (e, overId) => {
+                  e.preventDefault();
+                  if (!dragId || dragId === overId) return;
+                  const ids = orderedToday.map(t => t.id);
+                  const from = ids.indexOf(dragId);
+                  const to = ids.indexOf(overId);
+                  if (from === -1 || to === -1) return;
+                  const next = [...ids];
+                  const [m] = next.splice(from, 1);
+                  next.splice(to, 0, m);
+                  persistOrder(next);
+                };
+                return (
+                  <List
+                    loading={loading}
+                    dataSource={orderedToday}
+                    renderItem={item => {
+                      const prioColor = item.priority === 'High' ? '#FF6B6B' : item.priority === 'Medium' ? '#faad14' : '#8c8c8c';
+                      const isDragging = dragId === item.id;
+                      return (
+                      <List.Item
+                        draggable
+                        onDragStart={() => setDragId(item.id)}
+                        onDragOver={(e) => onDragOverItem(e, item.id)}
+                        onDragEnd={() => setDragId(null)}
+                        actions={[<Button type="text" danger icon={<DeleteOutlined />} onClick={() => deleteTask(item.id)} />]}
+                        className={recentlyCompleted.has(item.id) ? 'task-complete-anim' : ''}
+                        style={{ background: 'var(--bg-surface-2)', marginBottom: 12, borderRadius: 16, padding: '16px 20px', border: '2px solid var(--border-color)', borderLeft: `6px solid ${item.is_completed ? 'var(--border-color)' : prioColor}`, transition: 'all 0.3s', cursor: 'grab', opacity: isDragging ? 0.4 : 1, transform: isDragging ? 'scale(0.98)' : 'none' }}
+                      >
+                        <span style={{ color: 'var(--text-muted)', fontSize: 16, marginRight: 10, cursor: 'grab', userSelect: 'none' }} title="Kéo để sắp xếp">⋮⋮</span>
+                        <Checkbox checked={item.is_completed} onChange={() => toggleComplete(item.id, item.is_completed)}>
+                          <Text delete={item.is_completed} strong style={{fontSize: 16, color: item.is_completed ? 'var(--text-muted)' : 'var(--text-primary)'}}>{item.Task_Name}</Text>
+                          <div style={{color: 'var(--text-secondary)', fontSize: 12}}>{item.description}</div>
+                        </Checkbox>
+                        <Space size={6}>
+                          {item.is_recurring && <Tag color="cyan" style={{ borderRadius: 12, fontWeight: 600, fontSize: 11 }}>🔁 Cố định</Tag>}
+                          {(() => { const info = getDeadlineInfo(item.deadline); return info ? <Tag style={{ borderRadius: 12, fontWeight: 600, fontSize: 11, color: info.color, borderColor: info.color, background: `${info.color}18` }}>📅 {info.label}</Tag> : null; })()}
+                          <Tag color={item.priority === 'High' ? 'red' : item.priority === 'Medium' ? 'orange' : 'default'} style={{borderRadius: 20, fontWeight: 'bold'}}>{item.priority}</Tag>
+                        </Space>
+                      </List.Item>
+                      );
+                    }}
+                  />
+                );
+              })()}
             </Card>
           </div>
         );
@@ -1068,8 +1270,9 @@ export default function App() {
                 <div style={{minHeight: 20}}>
                   {tasks.filter(t => t.day_of_week === day).map(t => {
                     const dlInfo = getDeadlineInfo(t.deadline);
+                    const prioColor = t.priority === 'High' ? '#FF6B6B' : t.priority === 'Medium' ? '#faad14' : '#8c8c8c';
                     return (
-                      <div key={t.id} style={{background: 'var(--bg-surface-2)', padding: '10px 14px', borderRadius: 12, border: `1px solid ${dlInfo && !t.is_completed ? dlInfo.color + '60' : 'var(--border-color)'}`, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                      <div key={t.id} style={{background: 'var(--bg-surface-2)', padding: '10px 14px', borderRadius: 12, border: `1px solid ${dlInfo && !t.is_completed ? dlInfo.color + '60' : 'var(--border-color)'}`, borderLeft: `5px solid ${t.is_completed ? 'var(--border-color)' : prioColor}`, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                         <Checkbox checked={t.is_completed} onChange={() => toggleComplete(t.id, t.is_completed)}>
                           <Text delete={t.is_completed} style={{ color: t.is_completed ? 'var(--text-muted)' : 'var(--text-primary)' }}>{t.Task_Name}</Text>
                           {t.is_recurring && <Tag color="cyan" style={{ marginLeft: 6, fontSize: 11, borderRadius: 8 }}>🔁 Cố định</Tag>}
@@ -1137,20 +1340,27 @@ export default function App() {
             {/* MUSIC PLAYER */}
             <div style={{ maxWidth: 600, margin: '24px auto 0' }}>
               <Card style={{ ...cardStyle, textAlign: 'center' }}>
-                <Text style={{ fontWeight: 700, fontSize: 15, display: 'block', marginBottom: 16 }}><SoundOutlined /> Nhạc nền tập trung</Text>
-                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+                <Text style={{ fontWeight: 700, fontSize: 15, display: 'block', marginBottom: 4 }}><SoundOutlined /> Nhạc nền tập trung</Text>
+                <Text style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 14 }}>YouTube cần mạng · Web Audio chạy offline</Text>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
                   {[
-                    { key: 'rain',  label: '🌧 Mưa',    color: '#4ECDC4' },
-                    { key: 'ocean', label: '🌊 Sóng biển', color: '#2980B9' },
-                    { key: 'fire',  label: '🔥 Lửa',    color: '#E67E22' },
-                    { key: 'lofi',  label: '🎵 Lo-fi',  color: '#C13584' },
-                  ].map(({ key, label, color }) => (
+                    { key: 'rain',  label: '🌧 Mưa',       color: '#4ECDC4', kind: 'yt' },
+                    { key: 'ocean', label: '🌊 Sóng biển',  color: '#2980B9', kind: 'yt' },
+                    { key: 'fire',  label: '🔥 Lửa',       color: '#E67E22', kind: 'yt' },
+                    { key: 'lofi',  label: '🎵 Lo-fi',     color: '#C13584', kind: 'yt' },
+                    { key: 'white', label: '🌫 White noise', color: '#7f8c8d', kind: 'audio' },
+                    { key: 'brown', label: '🟤 Brown noise', color: '#8B5A2B', kind: 'audio' },
+                  ].map(({ key, label, color, kind }) => (
                     <Button
                       key={key}
                       shape="round"
                       onClick={() => {
-                        if (currentSound === key) { stopSound(); }
-                        else { stopSound(); setCurrentSound(key); }
+                        if (kind === 'audio') {
+                          playNoise(key);
+                        } else {
+                          if (currentSound === key) { stopSound(); }
+                          else { stopSound(); setCurrentSound(key); }
+                        }
                       }}
                       style={{
                         fontWeight: 700,
@@ -1497,6 +1707,9 @@ export default function App() {
         </Content>
       </Layout>
     </Layout>
+
+    {/* ── Onboarding Modal ── */}
+    <OnboardingModal open={showOnboarding} onClose={closeOnboarding} />
 
     {/* ── Floating XP text ── */}
     {floatingXps.map(f => (
