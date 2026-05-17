@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Progress, Tag, Statistic, Row, Col, Typography, message, Spin, Empty, Modal, Input } from 'antd';
-import { ThunderboltOutlined, TrophyOutlined } from '@ant-design/icons';
+import { Card, Button, Progress, Tag, Statistic, Row, Col, Typography, message, Spin, Empty, Modal, Input, Select } from 'antd';
+import { ThunderboltOutlined, TrophyOutlined, GiftOutlined } from '@ant-design/icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 const { Title, Text } = Typography;
+const { TextArea } = Input;
 
 const TREE_MAP = {
   cherry: { emoji: '🌸', name: 'Hoa Anh Đào', color: '#FFB7C5', gradient: 'linear-gradient(135deg, #FFB7C5, #FF6B9D)' },
@@ -13,7 +14,15 @@ const TREE_MAP = {
   bamboo: { emoji: '🎋', name: 'Tre',          color: '#95E1D3', gradient: 'linear-gradient(135deg, #95E1D3, #4ECDC4)' },
 };
 
+const FRUIT_MAP = {
+  cherry: { emoji: '🌸', name: 'Hoa Anh Đào', effect: 'Khiên Streak — cứu chuỗi ngày nếu lỡ bỏ 1 ngày', color: '#FFB7C5', gradient: 'linear-gradient(135deg, #FFB7C5, #FF6B9D)' },
+  apple:  { emoji: '🍎', name: 'Táo Trí Thức', effect: '+50 XP ngay lập tức', color: '#FF6B6B', gradient: 'linear-gradient(135deg, #FF6B6B, #FF8E53)' },
+  palm:   { emoji: '🌴', name: 'Dừa Năng Lượng', effect: '+5 nước tưới cây', color: '#4ECDC4', gradient: 'linear-gradient(135deg, #4ECDC4, #44A08D)' },
+  bamboo: { emoji: '🎋', name: 'Tre May Mắn', effect: 'x2 XP cho task hoàn thành tiếp theo', color: '#95E1D3', gradient: 'linear-gradient(135deg, #95E1D3, #38ada9)' },
+};
+
 const STAGE_LABELS = ['', '🌰 Hạt mầm', '🌱 Mầm non', '🌿 Cây con', '🪴 Cây lớn', '🌳 Cây trưởng thành'];
+const FRUIT_PER_CYCLE = 3;
 
 function CollectionSection({ collection, cardStyle }) {
   return (
@@ -55,31 +64,71 @@ export default function TreePage() {
   const [tree, setTree] = useState(null);
   const [water, setWater] = useState(0);
   const [seeds, setSeeds] = useState(0);
+  const [fruits, setFruits] = useState({ cherry: 0, apple: 0, palm: 0, bamboo: 0 });
   const [collection, setCollection] = useState([]);
   const [loading, setLoading] = useState(true);
   const [watering, setWatering] = useState(false);
   const [harvesting, setHarvesting] = useState(false);
   const [planting, setPlanting] = useState(false);
+  const [usingFruit, setUsingFruit] = useState(null);
   const [newTreeType, setNewTreeType] = useState('cherry');
   const [newTreeName, setNewTreeName] = useState('');
+  const [giftFruitType, setGiftFruitType] = useState(null);
+  const [giftReceiverId, setGiftReceiverId] = useState(null);
+  const [giftMessage, setGiftMessage] = useState('');
+  const [giftSending, setGiftSending] = useState(false);
+  const [friends, setFriends] = useState([]);
 
   const fetchData = async () => {
     if (!user) return;
     setLoading(true);
-    const [{ data: treeData }, { data: invData }, { data: seedData }, { data: colData }] = await Promise.all([
+    const [
+      { data: treeData },
+      { data: invData },
+      { data: seedData },
+      { data: fruitRows },
+      { data: colData },
+    ] = await Promise.all([
       supabase.from('trees').select('*').eq('user_id', user.id).eq('is_active', true).limit(1).maybeSingle(),
       supabase.from('inventory').select('quantity').eq('user_id', user.id).eq('item_type', 'water').single(),
       supabase.from('inventory').select('quantity').eq('user_id', user.id).eq('item_type', 'seed').maybeSingle(),
+      supabase.from('inventory').select('item_type, quantity').eq('user_id', user.id).in('item_type', ['fruit_cherry', 'fruit_apple', 'fruit_palm', 'fruit_bamboo']),
       supabase.from('tree_collection').select('*').eq('user_id', user.id).order('harvested_at', { ascending: false }),
     ]);
+
+    const fruitsObj = { cherry: 0, apple: 0, palm: 0, bamboo: 0 };
+    (fruitRows || []).forEach(r => {
+      const type = r.item_type.replace('fruit_', '');
+      if (type in fruitsObj) fruitsObj[type] = r.quantity;
+    });
+
     setTree(treeData || null);
     setWater(invData?.quantity || 0);
     setSeeds(seedData?.quantity || 0);
+    setFruits(fruitsObj);
     setCollection(colData || []);
     setLoading(false);
   };
 
+  const fetchFriends = async () => {
+    if (!user) return;
+    const { data: friendships } = await supabase
+      .from('friendships').select('friend_id')
+      .eq('user_id', user.id).eq('status', 'accepted');
+    const ids = (friendships || []).map(f => f.friend_id);
+    if (ids.length === 0) { setFriends([]); return; }
+    const { data } = await supabase.from('users').select('id, username, avatar_url').in('id', ids);
+    setFriends(data || []);
+  };
+
   useEffect(() => { fetchData(); }, [user]);
+
+  const upsertInventory = async (itemType, newQuantity) => {
+    return supabase.from('inventory').upsert(
+      { user_id: user.id, item_type: itemType, quantity: newQuantity },
+      { onConflict: 'user_id,item_type' }
+    );
+  };
 
   const handleWater = async () => {
     if (water <= 0) return message.warning('Hết nước rồi! Hãy hoàn thành task để kiếm thêm 💧');
@@ -90,22 +139,45 @@ export default function TreePage() {
       const newTotal = (profile?.total_xp || 0) + 10;
       const newWater = water - 1;
       const newStage = Math.min(5, Math.floor(newTotal / 200) + 1);
+      const justReachedMax = newStage === 5 && tree.growth_stage < 5;
 
-      await Promise.all([
+      let newWaterCount = tree.water_count || 0;
+      let producedFruit = false;
+      if (newStage >= 5) {
+        newWaterCount += 1;
+        if (newWaterCount >= FRUIT_PER_CYCLE) {
+          producedFruit = true;
+          newWaterCount = 0;
+        }
+      }
+
+      const updates = [
         supabase.from('inventory').update({ quantity: newWater }).eq('user_id', user.id).eq('item_type', 'water'),
         updateProfile({ current_xp: newXp, total_xp: newTotal }),
-        supabase.from('trees').update({ growth_stage: newStage }).eq('id', tree.id),
-      ]);
+        supabase.from('trees').update({ growth_stage: newStage, water_count: newWaterCount }).eq('id', tree.id),
+      ];
+      if (producedFruit) {
+        const fruitKey = `fruit_${tree.tree_type}`;
+        const newFruitQty = (fruits[tree.tree_type] || 0) + 1;
+        updates.push(upsertInventory(fruitKey, newFruitQty));
+      }
+      await Promise.all(updates);
 
       setWater(newWater);
-      setTree(prev => ({ ...prev, growth_stage: newStage }));
+      setTree(prev => ({ ...prev, growth_stage: newStage, water_count: newWaterCount }));
+      if (producedFruit) {
+        setFruits(prev => ({ ...prev, [tree.tree_type]: (prev[tree.tree_type] || 0) + 1 }));
+      }
 
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
       const waterKey = `water_count_${today}`;
       localStorage.setItem(waterKey, (parseInt(localStorage.getItem(waterKey) || '0', 10) + 1).toString());
 
-      if (newStage === 5 && tree.growth_stage < 5) {
-        message.success('🌳 Cây đã trưởng thành! Thu hoạch để nhận hạt giống và trồng cây mới.');
+      if (producedFruit) {
+        const fruitInfo = FRUIT_MAP[tree.tree_type];
+        message.success(`🎁 Cây ra quả! Nhận 1 ${fruitInfo.emoji} ${fruitInfo.name}`);
+      } else if (justReachedMax) {
+        message.success('🌳 Cây đã trưởng thành! Tiếp tục tưới để cây ra quả.');
       } else {
         message.success(`+10 XP! Cây đã được tưới 💧 (Còn ${newWater} nước)`);
       }
@@ -184,9 +256,226 @@ export default function TreePage() {
     }
   };
 
+  const handleUseFruit = async (type) => {
+    if ((fruits[type] || 0) <= 0) return;
+    setUsingFruit(type);
+    try {
+      const newFruitQty = fruits[type] - 1;
+      const fruitKey = `fruit_${type}`;
+      let effectMsg = '';
+
+      if (type === 'apple') {
+        const newXp = (profile?.current_xp || 0) + 50;
+        const newTotal = (profile?.total_xp || 0) + 50;
+        await Promise.all([
+          updateProfile({ current_xp: newXp, total_xp: newTotal }),
+          supabase.from('inventory').update({ quantity: newFruitQty }).eq('user_id', user.id).eq('item_type', fruitKey),
+        ]);
+        effectMsg = '+50 XP ⚡';
+      } else if (type === 'palm') {
+        const newWater = water + 5;
+        await Promise.all([
+          supabase.from('inventory').update({ quantity: newWater }).eq('user_id', user.id).eq('item_type', 'water'),
+          supabase.from('inventory').update({ quantity: newFruitQty }).eq('user_id', user.id).eq('item_type', fruitKey),
+        ]);
+        setWater(newWater);
+        effectMsg = '+5 💧 nước';
+      } else if (type === 'cherry') {
+        if (profile?.streak_shield) {
+          message.warning('Bạn đã có Khiên Streak đang hoạt động rồi!');
+          setUsingFruit(null);
+          return;
+        }
+        await Promise.all([
+          updateProfile({ streak_shield: true }),
+          supabase.from('inventory').update({ quantity: newFruitQty }).eq('user_id', user.id).eq('item_type', fruitKey),
+        ]);
+        effectMsg = '🌸 Khiên Streak đã kích hoạt!';
+      } else if (type === 'bamboo') {
+        if (profile?.bamboo_boost) {
+          message.warning('Bạn đã có Tre May Mắn đang hoạt động rồi!');
+          setUsingFruit(null);
+          return;
+        }
+        await Promise.all([
+          updateProfile({ bamboo_boost: true }),
+          supabase.from('inventory').update({ quantity: newFruitQty }).eq('user_id', user.id).eq('item_type', fruitKey),
+        ]);
+        effectMsg = '🎋 ×2 XP cho task tiếp theo!';
+      }
+
+      setFruits(prev => ({ ...prev, [type]: newFruitQty }));
+      message.success(`Đã dùng ${FRUIT_MAP[type].name} — ${effectMsg}`);
+    } catch {
+      message.error('Lỗi sử dụng quả!');
+    } finally {
+      setUsingFruit(null);
+    }
+  };
+
+  const openGiftModal = (type) => {
+    setGiftFruitType(type);
+    setGiftReceiverId(null);
+    setGiftMessage('');
+    fetchFriends();
+  };
+
+  const handleSendGift = async () => {
+    if (!giftReceiverId) return message.warning('Chọn bạn để gửi nhé!');
+    if ((fruits[giftFruitType] || 0) <= 0) return message.warning('Không còn quả để tặng!');
+    setGiftSending(true);
+    try {
+      const newFruitQty = fruits[giftFruitType] - 1;
+      const fruitKey = `fruit_${giftFruitType}`;
+      await Promise.all([
+        supabase.from('gifts').insert({
+          sender_id: user.id,
+          receiver_id: giftReceiverId,
+          item_type: fruitKey,
+          quantity: 1,
+          sender_message: giftMessage.trim() || null,
+        }),
+        supabase.from('inventory').update({ quantity: newFruitQty }).eq('user_id', user.id).eq('item_type', fruitKey),
+      ]);
+      setFruits(prev => ({ ...prev, [giftFruitType]: newFruitQty }));
+      const receiverName = friends.find(f => f.id === giftReceiverId)?.username || 'bạn';
+      message.success(`🎁 Đã gửi ${FRUIT_MAP[giftFruitType].name} tặng ${receiverName}!`);
+      setGiftFruitType(null);
+    } catch {
+      message.error('Lỗi gửi quà!');
+    } finally {
+      setGiftSending(false);
+    }
+  };
+
   const cardStyle = { borderRadius: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.08)', border: 'none' };
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spin size="large" /></div>;
+
+  const totalFruits = Object.values(fruits).reduce((a, b) => a + b, 0);
+  const giftFruitInfo = giftFruitType ? FRUIT_MAP[giftFruitType] : null;
+
+  const fruitInventoryNode = (
+    <Card style={{ ...cardStyle, marginTop: 24, borderTop: '6px solid #fa8c16' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <GiftOutlined style={{ fontSize: 20, color: '#fa8c16' }} />
+        <Text strong style={{ fontSize: 16 }}>Quả & Vật phẩm</Text>
+        <Tag color="orange" style={{ borderRadius: 20 }}>{totalFruits} quả</Tag>
+      </div>
+      <Row gutter={[12, 12]}>
+        {Object.entries(FRUIT_MAP).map(([type, info]) => {
+          const qty = fruits[type] || 0;
+          const dim = qty === 0;
+          return (
+            <Col key={type} xs={24} sm={12}>
+              <div style={{
+                background: dim ? 'var(--bg-secondary, #f7f7f7)' : info.gradient,
+                borderRadius: 16, padding: '14px 16px',
+                opacity: dim ? 0.55 : 1,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ fontSize: 36, lineHeight: 1 }}>{info.emoji}</div>
+                  <div style={{ flex: 1 }}>
+                    <Text style={{ color: dim ? undefined : '#fff', fontWeight: 700, fontSize: 14, display: 'block' }}>
+                      {info.name}
+                    </Text>
+                    <Text style={{ color: dim ? 'var(--text-secondary)' : 'rgba(255,255,255,0.85)', fontSize: 11 }}>
+                      {info.effect}
+                    </Text>
+                  </div>
+                  <Tag style={{
+                    background: dim ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.3)',
+                    border: 'none', color: dim ? undefined : '#fff',
+                    fontWeight: 700, borderRadius: 12,
+                  }}>×{qty}</Tag>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button
+                    size="small" block disabled={qty <= 0}
+                    loading={usingFruit === type}
+                    onClick={() => handleUseFruit(type)}
+                    style={{ borderRadius: 10, fontWeight: 600, height: 32, background: dim ? undefined : '#fff', border: 'none', color: dim ? undefined : info.color }}
+                  >
+                    Dùng
+                  </Button>
+                  <Button
+                    size="small" block disabled={qty <= 0} icon={<GiftOutlined />}
+                    onClick={() => openGiftModal(type)}
+                    style={{ borderRadius: 10, fontWeight: 600, height: 32, background: dim ? undefined : 'rgba(255,255,255,0.25)', border: 'none', color: dim ? undefined : '#fff' }}
+                  >
+                    Tặng
+                  </Button>
+                </div>
+              </div>
+            </Col>
+          );
+        })}
+      </Row>
+
+      {(profile?.streak_shield || profile?.bamboo_boost) && (
+        <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 12, background: 'rgba(82,196,26,0.1)', border: '1px solid rgba(82,196,26,0.3)' }}>
+          <Text strong style={{ fontSize: 12, color: '#52c41a' }}>Buff đang hoạt động:</Text>
+          <div style={{ marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {profile?.streak_shield && (
+              <Tag color="magenta" style={{ borderRadius: 12 }}>🌸 Khiên Streak</Tag>
+            )}
+            {profile?.bamboo_boost && (
+              <Tag color="green" style={{ borderRadius: 12 }}>🎋 ×2 XP task tiếp theo</Tag>
+            )}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+
+  const giftModalNode = (
+    <Modal
+      open={!!giftFruitType}
+      title={giftFruitInfo ? `Tặng ${giftFruitInfo.emoji} ${giftFruitInfo.name}` : 'Tặng quả'}
+      onCancel={() => setGiftFruitType(null)}
+      onOk={handleSendGift}
+      okText="🎁 Gửi quà"
+      cancelText="Hủy"
+      confirmLoading={giftSending}
+      okButtonProps={{ disabled: !giftReceiverId }}
+      destroyOnClose
+    >
+      {giftFruitInfo && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 12, background: giftFruitInfo.gradient, color: '#fff' }}>
+          <Text style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>Hiệu ứng: {giftFruitInfo.effect}</Text>
+        </div>
+      )}
+      <div style={{ marginBottom: 12 }}>
+        <Text strong style={{ display: 'block', marginBottom: 8 }}>Chọn bạn để tặng:</Text>
+        {friends.length === 0 ? (
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            Bạn chưa có bạn bè nào. Thêm bạn ở tab "Bạn bè" trước nhé!
+          </Text>
+        ) : (
+          <Select
+            value={giftReceiverId}
+            onChange={setGiftReceiverId}
+            placeholder="Chọn bạn..."
+            style={{ width: '100%' }}
+            size="large"
+            options={friends.map(f => ({ value: f.id, label: `@${f.username}` }))}
+          />
+        )}
+      </div>
+      <div>
+        <Text strong style={{ display: 'block', marginBottom: 8 }}>Lời nhắn (tùy chọn):</Text>
+        <TextArea
+          value={giftMessage}
+          onChange={e => setGiftMessage(e.target.value)}
+          placeholder="Một câu động viên cho bạn ấy..."
+          rows={3}
+          maxLength={140}
+          showCount
+          style={{ borderRadius: 10 }}
+        />
+      </div>
+    </Modal>
+  );
 
   // No active tree
   if (!tree) {
@@ -246,7 +535,10 @@ export default function TreePage() {
         ) : (
           <Empty description="Chưa có cây! Hãy đăng ký lại và chọn cây yêu thích 🌱" style={{ padding: 80 }} />
         )}
+        {totalFruits > 0 && fruitInventoryNode}
         {collection.length > 0 && <CollectionSection collection={collection} cardStyle={cardStyle} />}
+
+        {giftModalNode}
       </div>
     );
   }
@@ -255,6 +547,8 @@ export default function TreePage() {
   const stagePercent = Math.min(100, ((tree.growth_stage - 1) / 4) * 100);
   const xpToNextStage = (tree.growth_stage * 200) - (profile?.total_xp || 0);
   const isMaxStage = tree.growth_stage >= 5;
+  const waterCount = tree.water_count || 0;
+  const fruitProgress = Math.round((waterCount / FRUIT_PER_CYCLE) * 100);
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
@@ -306,10 +600,27 @@ export default function TreePage() {
           strokeWidth={16}
           format={() => `Giai đoạn ${tree.growth_stage}/5`}
         />
+
+        {isMaxStage && (
+          <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, background: 'rgba(250,140,22,0.08)', border: '1px solid rgba(250,140,22,0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text strong style={{ fontSize: 13 }}>🍃 Tiến độ ra quả</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Còn {FRUIT_PER_CYCLE - waterCount} lần tưới đến quả {FRUIT_MAP[tree.tree_type].emoji}
+              </Text>
+            </div>
+            <Progress
+              percent={fruitProgress}
+              strokeColor="#fa8c16"
+              showInfo={false}
+              strokeWidth={10}
+            />
+          </div>
+        )}
       </Card>
 
       {/* TƯỚI / THU HOẠCH */}
-      <Card style={{ ...cardStyle, marginBottom: collection.length > 0 ? 0 : undefined }}>
+      <Card style={cardStyle}>
         <div style={{ textAlign: 'center', padding: '16px 0' }}>
           {!isMaxStage ? (
             <>
@@ -337,32 +648,52 @@ export default function TreePage() {
             </>
           ) : (
             <>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🌳</div>
-              <Text strong style={{ display: 'block', fontSize: 16, marginBottom: 6 }}>
-                Cây đã trưởng thành hoàn toàn!
+              <Text type="secondary" style={{ display: 'block', marginBottom: 16, fontSize: 14 }}>
+                Tưới cây tiếp tục để ra quả, hoặc thu hoạch để trồng cây mới
               </Text>
-              <Text type="secondary" style={{ display: 'block', marginBottom: 20, fontSize: 13 }}>
-                Thu hoạch để lưu vào bộ sưu tập và nhận hạt giống trồng cây mới
-              </Text>
-              <Button
-                size="large" loading={harvesting}
-                onClick={handleHarvest}
-                style={{
-                  height: 56, padding: '0 40px', fontSize: 16, fontWeight: 700,
-                  borderRadius: 16, border: 'none',
-                  background: 'linear-gradient(135deg, #f6d365, #fda085)',
-                  color: '#fff',
-                  boxShadow: '0 8px 24px rgba(253,160,133,0.4)',
-                }}
-              >
-                🌾 Thu hoạch cây
-              </Button>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Button
+                  type="primary" size="large" loading={watering}
+                  disabled={water <= 0}
+                  onClick={handleWater}
+                  style={{
+                    height: 56, padding: '0 28px', fontSize: 15, fontWeight: 700,
+                    borderRadius: 16, border: 'none',
+                    background: water > 0 ? info.gradient : undefined,
+                    boxShadow: water > 0 ? `0 6px 18px ${info.color}66` : undefined,
+                  }}
+                >
+                  💧 Tưới ({water})
+                </Button>
+                <Button
+                  size="large" loading={harvesting}
+                  onClick={handleHarvest}
+                  style={{
+                    height: 56, padding: '0 28px', fontSize: 15, fontWeight: 700,
+                    borderRadius: 16, border: 'none',
+                    background: 'linear-gradient(135deg, #f6d365, #fda085)',
+                    color: '#fff',
+                    boxShadow: '0 6px 18px rgba(253,160,133,0.4)',
+                  }}
+                >
+                  🌾 Thu hoạch
+                </Button>
+              </div>
+              {water <= 0 && (
+                <Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 13 }}>
+                  💡 Hoàn thành task để nhận thêm nước nhé!
+                </Text>
+              )}
             </>
           )}
         </div>
       </Card>
 
+      {fruitInventoryNode}
+
       {collection.length > 0 && <CollectionSection collection={collection} cardStyle={cardStyle} />}
+
+      {giftModalNode}
     </div>
   );
 }

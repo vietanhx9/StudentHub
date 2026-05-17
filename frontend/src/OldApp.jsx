@@ -67,6 +67,13 @@ const QUEST_POOL = [
   { id: 'water_5',     label: 'Tưới cây 5 lần hôm nay',    type: 'water',    target: 5,  xp: 40,  icon: '🌿' },
 ];
 
+const FRUIT_DISPLAY = {
+  fruit_cherry: { emoji: '🌸', name: 'Hoa Anh Đào' },
+  fruit_apple:  { emoji: '🍎', name: 'Táo Trí Thức' },
+  fruit_palm:   { emoji: '🌴', name: 'Dừa Năng Lượng' },
+  fruit_bamboo: { emoji: '🎋', name: 'Tre May Mắn' },
+};
+
 const GROUP_META = {
   perfectionism: { color: '#722ed1', emoji: '🎯' },
   lowenergy:     { color: '#13c2c2', emoji: '🔋' },
@@ -168,6 +175,8 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [incomingGifts, setIncomingGifts] = useState([]);
+  const [claimingGiftId, setClaimingGiftId] = useState(null);
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -479,24 +488,38 @@ export default function App() {
         const today = getVNDateStr();
         const lastActive = profile?.last_active_date;
         let newStreak = profile?.streak_days || 0;
+        let usedShield = false;
 
         if (lastActive !== today) {
           const yesterday = getVNYesterdayStr();
-          newStreak = (lastActive === yesterday) ? newStreak + 1 : 1;
+          if (lastActive === yesterday) {
+            newStreak = newStreak + 1;
+          } else if (profile?.streak_shield && newStreak > 0) {
+            // Khiên Streak cứu chuỗi khi bỏ ngày
+            newStreak = newStreak + 1;
+            usedShield = true;
+          } else {
+            newStreak = 1;
+          }
         }
 
         const multiplier = getStreakMultiplier(newStreak);
-        const xpReward = Math.round(15 * multiplier);
+        const bambooActive = !!profile?.bamboo_boost;
+        const bambooMult = bambooActive ? 2 : 1;
+        const xpReward = Math.round(15 * multiplier * bambooMult);
         const newXp = (profile?.current_xp || 0) + xpReward;
         const newTotal = (profile?.total_xp || 0) + xpReward;
 
-        // Cập nhật XP + streak
-        await updateProfile({
+        // Cập nhật XP + streak + tiêu thụ buff (nếu có)
+        const profileUpdate = {
           current_xp: newXp,
           total_xp: newTotal,
           streak_days: newStreak,
           last_active_date: today,
-        });
+        };
+        if (usedShield) profileUpdate.streak_shield = false;
+        if (bambooActive) profileUpdate.bamboo_boost = false;
+        await updateProfile(profileUpdate);
 
         // +1 nước tưới cây
         const { data: inv } = await supabase
@@ -514,7 +537,9 @@ export default function App() {
         setTimeout(() => setRecentlyCompleted(prev => { const s = new Set(prev); s.delete(id); return s; }), 900);
 
         const bonusLabel = multiplier > 1 ? ` (x${multiplier} streak bonus 🔥)` : '';
-        message.success(`🎉 +${xpReward} XP ⚡${bonusLabel} +1 💧 nước tưới cây!`);
+        const bambooLabel = bambooActive ? ' 🎋(×2 Tre)' : '';
+        const shieldLabel = usedShield ? ' 🌸(Khiên cứu streak!)' : '';
+        message.success(`🎉 +${xpReward} XP ⚡${bonusLabel}${bambooLabel}${shieldLabel} +1 💧 nước tưới cây!`);
 
         await upsertDailyLog(xpReward, 0, 1);
 
@@ -633,11 +658,49 @@ export default function App() {
     fetchPendingRequests();
   };
 
+  const fetchIncomingGifts = async () => {
+    if (!user) return;
+    const { data: gifts } = await supabase
+      .from('gifts')
+      .select('*')
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (!gifts || gifts.length === 0) { setIncomingGifts([]); return; }
+    const senderIds = [...new Set(gifts.map(g => g.sender_id))];
+    const { data: senders } = await supabase.from('users').select('id, username, avatar_url').in('id', senderIds);
+    const senderMap = Object.fromEntries((senders || []).map(s => [s.id, s]));
+    setIncomingGifts(gifts.map(g => ({ ...g, sender: senderMap[g.sender_id] })));
+  };
+
+  const claimGift = async (gift) => {
+    setClaimingGiftId(gift.id);
+    try {
+      const { data: existing } = await supabase
+        .from('inventory').select('quantity')
+        .eq('user_id', user.id).eq('item_type', gift.item_type).maybeSingle();
+      const newQty = (existing?.quantity || 0) + gift.quantity;
+      await Promise.all([
+        supabase.from('inventory').upsert(
+          { user_id: user.id, item_type: gift.item_type, quantity: newQty },
+          { onConflict: 'user_id,item_type' }
+        ),
+        supabase.from('gifts').update({ status: 'claimed', claimed_at: new Date().toISOString() }).eq('id', gift.id),
+      ]);
+      setIncomingGifts(prev => prev.filter(g => g.id !== gift.id));
+      message.success(`🎁 Đã nhận quà từ ${gift.sender?.username || 'bạn bè'}!`);
+    } catch {
+      message.error('Lỗi nhận quà!');
+    } finally {
+      setClaimingGiftId(null);
+    }
+  };
+
   useEffect(() => {
-    if (activeKey === '7') { fetchFriends(); fetchPendingRequests(); }
+    if (activeKey === '7') { fetchFriends(); fetchPendingRequests(); fetchIncomingGifts(); }
   }, [activeKey]);
 
-  useEffect(() => { if (user) fetchPendingRequests(); }, [user]);
+  useEffect(() => { if (user) { fetchPendingRequests(); fetchIncomingGifts(); } }, [user]);
 
   const upsertDailyLog = async (xpDelta = 0, deepWorkDelta = 0, tasksDelta = 0) => {
     if (!user) return;
@@ -1222,6 +1285,43 @@ export default function App() {
                 </div>
               </div>
 
+              {incomingGifts.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <Title level={5} style={{ marginBottom: 12 }}>🎁 Quà đến ({incomingGifts.length})</Title>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {incomingGifts.map(gift => {
+                      const fruit = FRUIT_DISPLAY[gift.item_type] || { emoji: '🎁', name: gift.item_type };
+                      return (
+                        <div key={gift.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: 'rgba(250,140,22,0.08)', border: '1px solid rgba(250,140,22,0.3)' }}>
+                          <div style={{ fontSize: 32, lineHeight: 1, flexShrink: 0 }}>{fruit.emoji}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <Text strong style={{ color: 'var(--text-primary)', display: 'block' }}>
+                              {fruit.name} ×{gift.quantity}
+                            </Text>
+                            <Text style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block' }}>
+                              Từ <Text strong style={{ fontSize: 12 }}>@{gift.sender?.username || '???'}</Text>
+                            </Text>
+                            {gift.sender_message && (
+                              <Text italic style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginTop: 2 }}>
+                                "{gift.sender_message}"
+                              </Text>
+                            )}
+                          </div>
+                          <Button
+                            type="primary" size="small"
+                            loading={claimingGiftId === gift.id}
+                            onClick={() => claimGift(gift)}
+                            style={{ borderRadius: 10, background: 'linear-gradient(135deg, #fa8c16, #fa541c)', border: 'none', fontWeight: 600 }}
+                          >
+                            Nhận
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {pendingRequests.length > 0 && (
                 <div style={{ marginBottom: 24 }}>
                   <Title level={5} style={{ marginBottom: 12 }}>📬 Lời mời kết bạn ({pendingRequests.length})</Title>
@@ -1366,7 +1466,7 @@ export default function App() {
           { key: '4', icon: <span>🌳</span>, label: 'Cây của tôi' },
           { key: '5', icon: <TrophyOutlined />, label: 'Thành tích' },
           { key: '6', icon: <UserOutlined />, label: 'Hồ sơ cá nhân' },
-          { key: '7', icon: <TeamOutlined />, label: <Badge count={pendingRequests.length} size="small" offset={[8, 0]}>Bạn bè</Badge> },
+          { key: '7', icon: <TeamOutlined />, label: <Badge count={pendingRequests.length + incomingGifts.length} size="small" offset={[8, 0]}>Bạn bè</Badge> },
           { key: '8', icon: <BarChartOutlined />, label: 'Thống kê' },
         ]} />
       </Sider>
