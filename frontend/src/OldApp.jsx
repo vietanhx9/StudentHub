@@ -67,10 +67,68 @@ const QUEST_POOL = [
   { id: 'water_5',     label: 'Tưới cây 5 lần hôm nay',    type: 'water',    target: 5,  xp: 40,  icon: '🌿' },
 ];
 
-const generateDailyQuests = (dateStr) => {
+const GROUP_META = {
+  disciplined: { color: '#52c41a', emoji: '⚔️' },
+  moody:       { color: '#1890ff', emoji: '🎨' },
+  waiter:      { color: '#fa8c16', emoji: '⏰' },
+  redalert:    { color: '#f5222d', emoji: '🚨' },
+};
+
+const GROUP_TIPS = {
+  disciplined: [
+    'Hôm nay đã đủ rồi — nghỉ ngơi cũng là năng suất 💆',
+    'Sau 3 phiên Pomodoro, hãy ra ngoài đi dạo 15 phút 🚶',
+    'Burnout không báo trước — đừng để streak ép bạn quá sức 🔋',
+    'Hôm nay thử làm ít hơn 10% — xem cảm giác thế nào 😌',
+    'Bạn đã làm tốt. Cho phép bản thân dừng đúng giờ hôm nay 🌙',
+    'Giỏi không có nghĩa là không cần nghỉ — hãy lên kế hoạch nghỉ ngơi 🧘',
+    'Hiệu suất bền vững > sprint ngắn hạn. Pace bản thân 🏃',
+  ],
+  moody: [
+    'Chưa có hứng? Quy tắc 5 giây — 5...4...3...2...1 rồi bắt đầu 🚀',
+    'Hôm nay chỉ cần làm 1 task thôi — momentum sẽ tự đến 🎯',
+    'Cảm hứng đến từ hành động, không phải ngược lại 💡',
+    'Mở Deep Work ngay bây giờ — chỉ 10 phút thôi ⏱️',
+    'Task nào dễ nhất hôm nay? Làm cái đó trước 🎨',
+    'Mood không quan trọng bằng bước đầu tiên. Bước đi đi 👟',
+    'Tận dụng lúc có hứng bây giờ — nó sẽ không kéo dài mãi ⚡',
+  ],
+  waiter: [
+    'Deadline thật còn xa, nhưng deadline giả hôm nay là... ngay bây giờ! ⏰',
+    'Nếu làm xong hôm nay, tuần sau bạn sẽ cảm ơn bản thân 🙏',
+    'Bắt đầu 1 phiên 25 phút — đừng chờ "sẵn sàng" ⚡',
+    'Người đợi đến phút chót thường tiếc vì không bắt đầu sớm hơn 🕐',
+    'Đặt deadline giả sớm hơn 2–3 ngày — trick bản thân 🎭',
+    'Áp lực tự tạo hiệu quả hơn áp lực từ deadline thật 🔥',
+    '"Còn thời gian mà" — câu này đã lừa bạn bao nhiêu lần rồi? 🤔',
+  ],
+  redalert: [
+    'Hôm nay chỉ cần bắt đầu 1 task — chỉ 1 thôi 🌱',
+    'Không cần hoàn thành — chỉ cần mở file và nhìn vào 5 phút 👀',
+    'Chia task nhỏ nhất có thể. Xong 1 bước nhỏ = thắng lợi hôm nay 🏆',
+    'Deep Work 15 phút — sau đó muốn dừng cũng được, đã lời rồi ✨',
+    'Bạn không lười — bạn đang bị overwhelmed. Thở sâu, làm 1 việc nhỏ thôi 💙',
+    'Progress > Perfect. Xấu mà xong còn hơn đẹp mà chưa bắt đầu 🎯',
+    'Không đặt mục tiêu "hoàn thành" — chỉ đặt mục tiêu "bắt đầu" 🚪',
+  ],
+};
+
+const getDefaultPomo = (group) => {
+  if (group === 'disciplined') return 50;
+  if (group === 'redalert') return 15;
+  return 25;
+};
+
+const getQuestPoolForGroup = (group) => {
+  if (group === 'redalert') return QUEST_POOL.filter(q => ['tasks_1','tasks_3','deepwork_15','deepwork_30','water_1','water_3'].includes(q.id));
+  if (group === 'disciplined') return QUEST_POOL.filter(q => ['tasks_3','tasks_5','deepwork_30','deepwork_60','water_3','water_5'].includes(q.id));
+  return QUEST_POOL;
+};
+
+const generateDailyQuests = (dateStr, group = null) => {
   let seed = parseInt(dateStr.replace(/-/g, ''), 10);
   const rand = () => { seed = (seed * 1664525 + 1013904223) % 2147483648; return seed / 2147483648; };
-  const pool = [...QUEST_POOL];
+  const pool = [...getQuestPoolForGroup(group)];
   const picked = [];
   while (picked.length < 3 && pool.length > 0) {
     const idx = Math.floor(rand() * pool.length);
@@ -103,6 +161,7 @@ export default function App() {
   const [floatingXps, setFloatingXps] = useState([]);
   const [recentlyCompleted, setRecentlyCompleted] = useState(new Set());
   const rewardingTaskIds = useRef(new Set()); // Lock đồng bộ chống spam click
+  const pomoInitialized = useRef(false);
 
   // ─── ANIMATION HELPERS ────────────────────────────────────────────────────
   const calcLevel = (xp) => Math.max(1, Math.floor(Math.log2(xp / 50 + 1)) + 1);
@@ -294,7 +353,7 @@ export default function App() {
     setTodayLog(data || null);
   };
 
-  const loadDailyQuests = () => {
+  const loadDailyQuests = (group = null) => {
     const today = getVNDateStr();
     const key = `daily_quests_${today}`;
     const stored = localStorage.getItem(key);
@@ -302,7 +361,7 @@ export default function App() {
       setDailyQuests(JSON.parse(stored));
     } else {
       Object.keys(localStorage).filter(k => k.startsWith('daily_quests_') && k !== key).forEach(k => localStorage.removeItem(k));
-      const quests = generateDailyQuests(today);
+      const quests = generateDailyQuests(today, group);
       localStorage.setItem(key, JSON.stringify(quests));
       setDailyQuests(quests);
     }
@@ -332,7 +391,16 @@ export default function App() {
     message.success(`🎯 Quest hoàn thành! +${xpReward} XP bonus!`);
   };
 
-  useEffect(() => { if (user) { requestNotificationPermission(); checkWeeklyReset().then(() => fetchTasks()); fetchTodayLog(); loadDailyQuests(); } }, [user]);
+  useEffect(() => { if (user) { requestNotificationPermission(); checkWeeklyReset().then(() => fetchTasks()); fetchTodayLog(); } }, [user]);
+  useEffect(() => { if (user) { loadDailyQuests(profile?.procrastination_group || null); } }, [user, profile?.procrastination_group]);
+  useEffect(() => {
+    if (profile?.procrastination_group && !pomoInitialized.current && !isCounting) {
+      const def = getDefaultPomo(profile.procrastination_group);
+      setPomoMode(def);
+      setTimeLeft(def * 60);
+      pomoInitialized.current = true;
+    }
+  }, [profile?.procrastination_group]);
 
   // --- LOGIC RULE 5 GIÂY ---
   const startRule5s = () => {
@@ -781,6 +849,22 @@ export default function App() {
               );
             })()}
 
+            {profile?.procrastination_group && (() => {
+              const grp = profile.procrastination_group;
+              const tips = GROUP_TIPS[grp];
+              const meta = GROUP_META[grp];
+              if (!tips || !meta) return null;
+              let seed = parseInt(getVNDateStr().replace(/-/g, ''), 10) + grp.length * 17;
+              seed = (seed * 1664525 + 1013904223) % 2147483648;
+              const tip = tips[seed % tips.length];
+              return (
+                <div style={{ marginTop: 16, padding: '12px 20px', borderRadius: 14, background: `${meta.color}12`, border: `1px solid ${meta.color}35`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Text style={{ fontSize: 20, flexShrink: 0 }}>{meta.emoji}</Text>
+                  <Text style={{ color: 'var(--text-primary)', fontSize: 14, fontStyle: 'italic', lineHeight: 1.5 }}>{tip}</Text>
+                </div>
+              );
+            })()}
+
             <Card
               title={<Title level={4} style={{ margin: 0, color: '#F7C948' }}>🎯 Daily Quest</Title>}
               extra={<Text style={{ color: 'var(--text-muted)', fontSize: 12 }}>Reset mỗi ngày · {getVNDateStr()}</Text>}
@@ -830,10 +914,15 @@ export default function App() {
                 <Input size="large" placeholder="Sực nhớ ra việc gì? Điền liền tay..." value={quickInput} onChange={e => setQuickInput(e.target.value)} onPressEnter={() => handleAddTask(quickInput, getTodayVN(), 'Quick Add', 'Medium', true, quickDeadline ? quickDeadline.format('YYYY-MM-DD') : null)} style={{borderRadius: '12px 0 0 12px', background: 'var(--input-bg)'}} />
                 <Button size="large" type="primary" style={{background: '#FF6B6B', border: 'none', borderRadius: '0 12px 12px 0'}} onClick={() => handleAddTask(quickInput, getTodayVN(), 'Quick Add', 'Medium', true, quickDeadline ? quickDeadline.format('YYYY-MM-DD') : null)}>🚀 Triển</Button>
               </Space.Compact>
-              <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ marginBottom: profile?.procrastination_group === 'redalert' ? 8 : 20, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>📅 Deadline (tùy chọn):</Text>
                 <DatePicker size="small" value={quickDeadline} onChange={setQuickDeadline} placeholder="Chọn ngày hết hạn" style={{ borderRadius: 10 }} />
               </div>
+              {profile?.procrastination_group === 'redalert' && (
+                <div style={{ marginBottom: 14, padding: '8px 14px', borderRadius: 10, background: 'rgba(245,34,45,0.07)', border: '1px solid rgba(245,34,45,0.25)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 13, color: '#f5222d' }}>💡 Chia nhỏ task thành các bước dưới 15 phút để dễ bắt đầu hơn nhé!</Text>
+                </div>
+              )}
               
               <List
                 loading={loading}
@@ -864,7 +953,12 @@ export default function App() {
           <Card style={cardStyle} title={<Title level={4} style={{margin: 0}}>🗓️ Master Schedule</Title>}>
             <div style={{ background: 'var(--bg-surface-3)', padding: 24, borderRadius: 20, marginBottom: 30 }}>
               <Row gutter={[16, 16]}>
-                <Col span={12}><Input size="large" placeholder="Tên nhiệm vụ..." value={input.name} onChange={e => setInput({...input, name: e.target.value})} /></Col>
+                <Col span={12}>
+                  <Input size="large" placeholder="Tên nhiệm vụ..." value={input.name} onChange={e => setInput({...input, name: e.target.value})} />
+                  {profile?.procrastination_group === 'redalert' && (
+                    <Text style={{ fontSize: 12, color: '#f5222d', marginTop: 4, display: 'block' }}>💡 Task ngắn dưới 15 phút dễ hoàn thành hơn — hãy chia nhỏ nếu cần!</Text>
+                  )}
+                </Col>
                 <Col span={6}>
                   <Select size="large" style={{width: '100%'}} value={input.day} onChange={v => setInput({...input, day: v})}>
                     {['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ Nhật'].map(d => <Option key={d} value={d}>{d}</Option>)}
