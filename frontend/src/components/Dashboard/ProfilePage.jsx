@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, Avatar, Typography, Button, Tag, Progress, Divider, Row, Col, Input, message, Form, Upload } from 'antd';
 import { UserOutlined, MailOutlined, CopyOutlined, EditOutlined, LogoutOutlined, SaveOutlined, CloseOutlined, TrophyOutlined, StarFilled, CameraOutlined, ExperimentOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
-import QuizPage, { GROUPS } from './QuizPage';
+import QuizPage, { CAUSE_META, SEVERITY_META, parseGroupCode } from './QuizPage';
 
 const { Title, Text } = Typography;
 
@@ -43,7 +43,9 @@ export default function ProfilePage() {
   const xp = profile?.current_xp || 0;
   const level = getLevel(xp);
   const xpInfo = getXpToNext(xp);
-  const userGroup = profile?.procrastination_group ? GROUPS[profile.procrastination_group] : null;
+  const parsedGroup = parseGroupCode(profile?.procrastination_group);
+  const userCause = parsedGroup ? CAUSE_META[parsedGroup.cause] : null;
+  const userSeverity = parsedGroup ? SEVERITY_META[parsedGroup.severity] : null;
   const handleAvatarUpload = (file) => {
     const isImage = file.type.startsWith('image/');
     if (!isImage) {
@@ -169,21 +171,26 @@ export default function ProfilePage() {
         </Text>
       </Card>
 
-      {/* MỨC ĐỘ TRÌ HOÃN */}
-      {userGroup ? (
-        <Card style={{ ...cardStyle, marginBottom: 24, background: userGroup.gradient, color: '#fff' }}>
+      {/* PHÂN TÍCH KIỂU TRÌ HOÃN */}
+      {userCause ? (
+        <Card style={{ ...cardStyle, marginBottom: 24, background: userCause.gradient, color: '#fff' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <div style={{ fontSize: 56, lineHeight: 1 }}>{userGroup.emoji}</div>
+            <div style={{ fontSize: 56, lineHeight: 1 }}>{userCause.emoji}</div>
             <div style={{ flex: 1 }}>
               <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
-                MỨC ĐỘ TRÌ HOÃN CỦA BẠN
+                KIỂU TRÌ HOÃN CỦA BẠN
               </Text>
               <Title level={4} style={{ margin: '4px 0', color: '#fff', fontWeight: 900 }}>
-                {userGroup.name}
+                {userCause.name}
               </Title>
-              <Tag style={{ borderRadius: 20, fontWeight: 700, fontSize: 12, background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff' }}>
-                {userGroup.range}
-              </Tag>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Tag style={{ borderRadius: 20, fontWeight: 700, fontSize: 12, background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff' }}>
+                  Mức độ: {userSeverity.label}
+                </Tag>
+                <Tag style={{ borderRadius: 20, fontWeight: 700, fontSize: 12, background: userSeverity.color, border: 'none', color: '#fff' }}>
+                  {userSeverity.percent}
+                </Tag>
+              </div>
             </div>
             <Button
               icon={<ReloadOutlined />}

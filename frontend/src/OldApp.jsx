@@ -68,60 +68,77 @@ const QUEST_POOL = [
 ];
 
 const GROUP_META = {
-  disciplined: { color: '#52c41a', emoji: '⚔️' },
-  moody:       { color: '#1890ff', emoji: '🎨' },
-  waiter:      { color: '#fa8c16', emoji: '⏰' },
-  redalert:    { color: '#f5222d', emoji: '🚨' },
+  perfectionism: { color: '#722ed1', emoji: '🎯' },
+  lowenergy:     { color: '#13c2c2', emoji: '🔋' },
+  distraction:   { color: '#fa8c16', emoji: '📱' },
+  avoidance:     { color: '#1890ff', emoji: '🌀' },
 };
 
 const GROUP_TIPS = {
-  disciplined: [
-    'Hôm nay đã đủ rồi — nghỉ ngơi cũng là năng suất 💆',
-    'Sau 3 phiên Pomodoro, hãy ra ngoài đi dạo 15 phút 🚶',
-    'Burnout không báo trước — đừng để streak ép bạn quá sức 🔋',
-    'Hôm nay thử làm ít hơn 10% — xem cảm giác thế nào 😌',
-    'Bạn đã làm tốt. Cho phép bản thân dừng đúng giờ hôm nay 🌙',
-    'Giỏi không có nghĩa là không cần nghỉ — hãy lên kế hoạch nghỉ ngơi 🧘',
-    'Hiệu suất bền vững > sprint ngắn hạn. Pace bản thân 🏃',
+  perfectionism: [
+    '80% xong còn hơn 100% trong đầu — bắt đầu đi đã 🎯',
+    'Hôm nay thử nộp "bản thảo" thay vì chờ hoàn hảo nhé',
+    'Time-box từng phần: làm 25 phút rồi dừng, dù xong hay chưa ⏱️',
+    'Hoàn thành trước, hoàn thiện sau — đó là cách mọi thứ tốt được tạo ra',
+    'Hôm nay làm 1 task ở mức "đủ tốt" thay vì 0 task ở mức hoàn hảo 💡',
+    'Tiêu chuẩn cao là tốt — nhưng đừng để nó khóa chặt bạn trước khi bắt đầu',
+    'Người giỏi nhất cũng nộp bản chưa hoàn hảo — rồi cải thiện dần 🌱',
   ],
-  moody: [
-    'Chưa có hứng? Quy tắc 5 giây — 5...4...3...2...1 rồi bắt đầu 🚀',
-    'Hôm nay chỉ cần làm 1 task thôi — momentum sẽ tự đến 🎯',
-    'Cảm hứng đến từ hành động, không phải ngược lại 💡',
-    'Mở Deep Work ngay bây giờ — chỉ 10 phút thôi ⏱️',
-    'Task nào dễ nhất hôm nay? Làm cái đó trước 🎨',
-    'Mood không quan trọng bằng bước đầu tiên. Bước đi đi 👟',
-    'Tận dụng lúc có hứng bây giờ — nó sẽ không kéo dài mãi ⚡',
+  lowenergy: [
+    'Năng lượng thấp? Học 15 phút thôi — bắt đầu nhỏ, não sẽ tự lên cơ 🔋',
+    'Hôm nay ưu tiên nghỉ ngơi đúng cách — đó cũng là đầu tư cho năng suất',
+    'Thử học vào giờ mình thường tỉnh nhất — đừng cố ép khi đang đuối',
+    'Một phiên Pomodoro ngắn hôm nay vẫn tốt hơn không học gì ✨',
+    'Nếu mệt thật sự hãy nghỉ — nhưng nếu chỉ lười, 10 phút đầu là chìa khóa',
+    'Uống nước, vươn vai, rồi mở task — cơ thể cần tín hiệu "bắt đầu" 💧',
+    'Ngủ đủ giấc tối nay = năng suất gấp đôi ngày mai 🌙',
   ],
-  waiter: [
-    'Deadline thật còn xa, nhưng deadline giả hôm nay là... ngay bây giờ! ⏰',
-    'Nếu làm xong hôm nay, tuần sau bạn sẽ cảm ơn bản thân 🙏',
-    'Bắt đầu 1 phiên 25 phút — đừng chờ "sẵn sàng" ⚡',
-    'Người đợi đến phút chót thường tiếc vì không bắt đầu sớm hơn 🕐',
-    'Đặt deadline giả sớm hơn 2–3 ngày — trick bản thân 🎭',
-    'Áp lực tự tạo hiệu quả hơn áp lực từ deadline thật 🔥',
-    '"Còn thời gian mà" — câu này đã lừa bạn bao nhiêu lần rồi? 🤔',
+  distraction: [
+    'Thử để điện thoại ở phòng khác trong 1 phiên học hôm nay 📱',
+    'Mỗi lần cầm điện thoại lên, hỏi: "Mình đang tìm gì?" — thường là không có gì',
+    'Dùng Focus Mode hôm nay — ẩn mọi thứ, chỉ còn task và đồng hồ 🎯',
+    'Đặt lịch kiểm tra mạng xã hội 2 lần/ngày thay vì bất kỳ lúc nào',
+    'Môi trường quyết định 80% khả năng tập trung — sắp xếp góc học tập gọn lại 🧹',
+    'Học với tai nghe nhạc không lời — chặn tiếng ồn xung quanh hiệu quả 🎵',
+    'Khi muốn xem điện thoại, đếm đến 10 rồi nhìn vào task — thường là đủ',
   ],
-  redalert: [
-    'Hôm nay chỉ cần bắt đầu 1 task — chỉ 1 thôi 🌱',
-    'Không cần hoàn thành — chỉ cần mở file và nhìn vào 5 phút 👀',
-    'Chia task nhỏ nhất có thể. Xong 1 bước nhỏ = thắng lợi hôm nay 🏆',
-    'Deep Work 15 phút — sau đó muốn dừng cũng được, đã lời rồi ✨',
-    'Bạn không lười — bạn đang bị overwhelmed. Thở sâu, làm 1 việc nhỏ thôi 💙',
-    'Progress > Perfect. Xấu mà xong còn hơn đẹp mà chưa bắt đầu 🎯',
-    'Không đặt mục tiêu "hoàn thành" — chỉ đặt mục tiêu "bắt đầu" 🚪',
+  avoidance: [
+    'Hôm nay chỉ cần "bắt đầu" task khó nhất — 5 phút thôi, không cần xong 🌀',
+    'Khi muốn né, hỏi: "Mình đang tránh cảm giác gì?" — đặt tên cho nó là đủ',
+    'Đặt task khó ở đầu ngày — khi não chưa kịp tìm lý do né 🌅',
+    'Dọn phòng, pha cà phê rồi mới học? — đó là né tránh được ngụy trang 👀',
+    'Chia task ra phần nhỏ nhất có thể, rồi làm 1 phần đó thôi',
+    'Thử nói thành tiếng: "Mình sẽ làm X trong 10 phút" — cam kết bằng lời có tác dụng',
+    'Sau mỗi lần né xong, cảm giác tệ hơn — làm xong, cảm giác nhẹ hơn rất nhiều 💙',
   ],
 };
 
-const getDefaultPomo = (group) => {
-  if (group === 'disciplined') return 50;
-  if (group === 'redalert') return 15;
-  return 25;
+// Extract severity level from combined code like "perfectionism_high" → "high"
+const getSeverityFromCode = (code) => {
+  if (!code) return null;
+  const parts = code.split('_');
+  return parts[parts.length - 1];
 };
 
-const getQuestPoolForGroup = (group) => {
-  if (group === 'redalert') return QUEST_POOL.filter(q => ['tasks_1','tasks_3','deepwork_15','deepwork_30','water_1','water_3'].includes(q.id));
-  if (group === 'disciplined') return QUEST_POOL.filter(q => ['tasks_3','tasks_5','deepwork_30','deepwork_60','water_3','water_5'].includes(q.id));
+// Extract cause from combined code like "lowenergy_high" → "lowenergy"
+const getCauseFromCode = (code) => {
+  if (!code) return null;
+  const lastIdx = code.lastIndexOf('_');
+  return lastIdx === -1 ? null : code.substring(0, lastIdx);
+};
+
+const getDefaultPomo = (groupCode) => {
+  const sev = getSeverityFromCode(groupCode);
+  if (sev === 'extreme') return 15;
+  if (sev === 'high') return 25;
+  if (sev === 'medium') return 35;
+  return 50; // low
+};
+
+const getQuestPoolForGroup = (groupCode) => {
+  const sev = getSeverityFromCode(groupCode);
+  if (sev === 'extreme') return QUEST_POOL.filter(q => ['tasks_1','tasks_3','deepwork_15','deepwork_30','water_1','water_3'].includes(q.id));
+  if (sev === 'low') return QUEST_POOL.filter(q => ['tasks_3','tasks_5','deepwork_30','deepwork_60','water_3','water_5'].includes(q.id));
   return QUEST_POOL;
 };
 
@@ -850,11 +867,11 @@ export default function App() {
             })()}
 
             {profile?.procrastination_group && (() => {
-              const grp = profile.procrastination_group;
-              const tips = GROUP_TIPS[grp];
-              const meta = GROUP_META[grp];
+              const cause = getCauseFromCode(profile.procrastination_group);
+              const tips = GROUP_TIPS[cause];
+              const meta = GROUP_META[cause];
               if (!tips || !meta) return null;
-              let seed = parseInt(getVNDateStr().replace(/-/g, ''), 10) + grp.length * 17;
+              let seed = parseInt(getVNDateStr().replace(/-/g, ''), 10) + cause.length * 17;
               seed = (seed * 1664525 + 1013904223) % 2147483648;
               const tip = tips[seed % tips.length];
               return (
@@ -914,11 +931,11 @@ export default function App() {
                 <Input size="large" placeholder="Sực nhớ ra việc gì? Điền liền tay..." value={quickInput} onChange={e => setQuickInput(e.target.value)} onPressEnter={() => handleAddTask(quickInput, getTodayVN(), 'Quick Add', 'Medium', true, quickDeadline ? quickDeadline.format('YYYY-MM-DD') : null)} style={{borderRadius: '12px 0 0 12px', background: 'var(--input-bg)'}} />
                 <Button size="large" type="primary" style={{background: '#FF6B6B', border: 'none', borderRadius: '0 12px 12px 0'}} onClick={() => handleAddTask(quickInput, getTodayVN(), 'Quick Add', 'Medium', true, quickDeadline ? quickDeadline.format('YYYY-MM-DD') : null)}>🚀 Triển</Button>
               </Space.Compact>
-              <div style={{ marginBottom: profile?.procrastination_group === 'redalert' ? 8 : 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ marginBottom: getSeverityFromCode(profile?.procrastination_group) === 'extreme' ? 8 : 20, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>📅 Deadline (tùy chọn):</Text>
                 <DatePicker size="small" value={quickDeadline} onChange={setQuickDeadline} placeholder="Chọn ngày hết hạn" style={{ borderRadius: 10 }} />
               </div>
-              {profile?.procrastination_group === 'redalert' && (
+              {getSeverityFromCode(profile?.procrastination_group) === 'extreme' && (
                 <div style={{ marginBottom: 14, padding: '8px 14px', borderRadius: 10, background: 'rgba(245,34,45,0.07)', border: '1px solid rgba(245,34,45,0.25)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Text style={{ fontSize: 13, color: '#f5222d' }}>💡 Chia nhỏ task thành các bước dưới 15 phút để dễ bắt đầu hơn nhé!</Text>
                 </div>
@@ -955,7 +972,7 @@ export default function App() {
               <Row gutter={[16, 16]}>
                 <Col span={12}>
                   <Input size="large" placeholder="Tên nhiệm vụ..." value={input.name} onChange={e => setInput({...input, name: e.target.value})} />
-                  {profile?.procrastination_group === 'redalert' && (
+                  {getSeverityFromCode(profile?.procrastination_group) === 'extreme' && (
                     <Text style={{ fontSize: 12, color: '#f5222d', marginTop: 4, display: 'block' }}>💡 Task ngắn dưới 15 phút dễ hoàn thành hơn — hãy chia nhỏ nếu cần!</Text>
                   )}
                 </Col>
