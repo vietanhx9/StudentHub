@@ -370,13 +370,14 @@ export default function TreePage() {
             <Col key={type} xs={24} sm={12}>
               <div style={{
                 background: dim ? 'var(--bg-secondary, #f7f7f7)' : info.gradient,
+                border: dim ? '1px solid var(--border-color, rgba(0,0,0,0.06))' : 'none',
                 borderRadius: 16, padding: '14px 16px',
-                opacity: dim ? 0.55 : 1,
+                opacity: dim ? 0.85 : 1,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                   <div style={{ fontSize: 36, lineHeight: 1 }}>{info.emoji}</div>
                   <div style={{ flex: 1 }}>
-                    <Text style={{ color: dim ? undefined : '#fff', fontWeight: 700, fontSize: 14, display: 'block' }}>
+                    <Text style={{ color: dim ? 'var(--text-primary)' : '#fff', fontWeight: 700, fontSize: 14, display: 'block' }}>
                       {info.name}
                     </Text>
                     <Text style={{ color: dim ? 'var(--text-secondary)' : 'rgba(255,255,255,0.85)', fontSize: 11 }}>
@@ -384,8 +385,8 @@ export default function TreePage() {
                     </Text>
                   </div>
                   <Tag style={{
-                    background: dim ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.3)',
-                    border: 'none', color: dim ? undefined : '#fff',
+                    background: dim ? 'var(--bg-primary, rgba(0,0,0,0.05))' : 'rgba(255,255,255,0.3)',
+                    border: 'none', color: dim ? 'var(--text-primary)' : '#fff',
                     fontWeight: 700, borderRadius: 12,
                   }}>×{qty}</Tag>
                 </div>
