@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Progress, Tag, Statistic, Row, Col, Typography, message, Spin, Empty, Modal, Input, Select } from 'antd';
-import { ThunderboltOutlined, TrophyOutlined, GiftOutlined } from '@ant-design/icons';
+import { ThunderboltOutlined, TrophyOutlined, GiftOutlined, EditOutlined, BookOutlined } from '@ant-design/icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -77,6 +77,13 @@ export default function TreePage() {
   const [usingFruit, setUsingFruit] = useState(null);
   const [newTreeType, setNewTreeType] = useState('cherry');
   const [newTreeName, setNewTreeName] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [journalEntries, setJournalEntries] = useState([]);
+  const [showJournalModal, setShowJournalModal] = useState(false);
+  const [journalInput, setJournalInput] = useState('');
+  const [journalStage, setJournalStage] = useState(null);
+  const [journalIsMilestone, setJournalIsMilestone] = useState(false);
   const [giftFruitType, setGiftFruitType] = useState(null);
   const [giftReceiverId, setGiftReceiverId] = useState(null);
   const [giftMessage, setGiftMessage] = useState('');
@@ -106,6 +113,16 @@ export default function TreePage() {
       if (type in fruitsObj) fruitsObj[type] = r.quantity;
     });
 
+    // Auto-sync growth_stage nếu total_xp đã đủ điều kiện lên stage cao hơn
+    if (treeData) {
+      const totalXp = profile?.total_xp || 0;
+      const expectedStage = Math.min(5, Math.floor(totalXp / 200) + 1);
+      if (expectedStage > (treeData.growth_stage || 1)) {
+        await supabase.from('trees').update({ growth_stage: expectedStage }).eq('id', treeData.id);
+        treeData.growth_stage = expectedStage;
+      }
+    }
+
     setTree(treeData || null);
     setWater(invData?.quantity || 0);
     setSeeds(seedData?.quantity || 0);
@@ -126,6 +143,37 @@ export default function TreePage() {
   };
 
   useEffect(() => { fetchData(); }, [user]);
+
+  useEffect(() => {
+    if (!tree?.id) return;
+    try {
+      const stored = localStorage.getItem(`tree_journal_${tree.id}`);
+      setJournalEntries(stored ? JSON.parse(stored) : []);
+    } catch {
+      setJournalEntries([]);
+    }
+  }, [tree?.id]);
+
+  const saveJournalEntry = (stage, note, isMilestone = false) => {
+    const entry = {
+      stage,
+      note: note.trim(),
+      date: new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      milestone: isMilestone,
+    };
+    setJournalEntries(prev => {
+      const updated = [entry, ...prev];
+      if (tree?.id) localStorage.setItem(`tree_journal_${tree.id}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const openJournalModal = (stage, isMilestone = false) => {
+    setJournalStage(stage);
+    setJournalIsMilestone(isMilestone);
+    setJournalInput('');
+    setShowJournalModal(true);
+  };
 
   const upsertInventory = async (itemType, newQuantity) => {
     return supabase.from('inventory').upsert(
@@ -186,6 +234,10 @@ export default function TreePage() {
         message.success('🌳 Cây đã trưởng thành! Tiếp tục tưới để cây ra quả.');
       } else {
         message.success(`+10 XP! Cây đã được tưới 💧 (Còn ${newWater} nước)`);
+      }
+
+      if (newStage > tree.growth_stage) {
+        setTimeout(() => openJournalModal(newStage, true), 600);
       }
     } catch {
       message.error('Lỗi tưới cây!');
@@ -259,6 +311,19 @@ export default function TreePage() {
       message.error('Lỗi trồng cây!');
     } finally {
       setPlanting(false);
+    }
+  };
+
+  const handleRename = async () => {
+    const trimmed = renameValue.trim();
+    if (!trimmed) return message.warning('Tên cây không được để trống!');
+    try {
+      await supabase.from('trees').update({ tree_name: trimmed }).eq('id', tree.id);
+      setTree(prev => ({ ...prev, tree_name: trimmed }));
+      setRenaming(false);
+      message.success('Đã đổi tên cây!');
+    } catch {
+      message.error('Lỗi đổi tên cây!');
     }
   };
 
@@ -576,7 +641,21 @@ export default function TreePage() {
         <div className={waterAnim ? 'tree-shake' : ''} style={{ fontSize: 120, lineHeight: 1.2, marginBottom: 16, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.2))', display: 'inline-block', transformOrigin: 'center bottom' }}>
           {info.emoji}
         </div>
-        <Title level={2} style={{ margin: 0, color: '#fff', fontWeight: 900 }}>{tree.tree_name}</Title>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Title level={2} style={{ margin: 0, color: '#fff', fontWeight: 900 }}>{tree.tree_name}</Title>
+          <Button
+            type="text" size="small" icon={<EditOutlined />}
+            onClick={() => { setRenameValue(tree.tree_name); setRenaming(true); }}
+            style={{ color: 'rgba(255,255,255,0.65)', marginTop: 2, padding: '0 6px' }}
+            title="Đổi tên cây"
+          />
+          <Button
+            type="text" size="small" icon={<BookOutlined />}
+            onClick={() => openJournalModal(tree.growth_stage, false)}
+            style={{ color: 'rgba(255,255,255,0.65)', marginTop: 2, padding: '0 6px' }}
+            title="Thêm ký ức"
+          />
+        </div>
         <Tag style={{ marginTop: 8, borderRadius: 20, fontWeight: 700, fontSize: 14, background: 'rgba(0,0,0,0.25)', border: 'none', color: '#fff' }}>
           {STAGE_LABELS[tree.growth_stage] || '🌳 Trưởng thành'}
         </Tag>
@@ -714,9 +793,105 @@ export default function TreePage() {
 
       {fruitInventoryNode}
 
+      {/* JOURNAL */}
+      <Card style={{ ...cardStyle, marginTop: 24, borderTop: '6px solid #95E1D3' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: journalEntries.length > 0 ? 16 : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <BookOutlined style={{ fontSize: 18, color: '#4ECDC4' }} />
+            <Text strong style={{ fontSize: 16 }}>Ký ức của cây</Text>
+            {journalEntries.length > 0 && (
+              <Tag color="cyan" style={{ borderRadius: 20 }}>{journalEntries.length} kỷ niệm</Tag>
+            )}
+          </div>
+          <Button
+            size="small" type="dashed"
+            onClick={() => openJournalModal(tree.growth_stage, false)}
+            style={{ borderRadius: 10, fontSize: 12 }}
+          >
+            + Thêm ký ức
+          </Button>
+        </div>
+        {journalEntries.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px 0 8px', color: 'var(--text-muted)', fontSize: 13 }}>
+            📖 Chưa có ký ức nào. Tưới cây để mở khóa giai đoạn mới và ghi lại khoảnh khắc đó!
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {journalEntries.map((entry, i) => (
+              <div key={i} style={{
+                display: 'flex', gap: 12, padding: '12px 14px',
+                borderRadius: 12,
+                background: entry.milestone ? 'rgba(78,205,196,0.08)' : 'var(--bg-secondary)',
+                border: `1px solid ${entry.milestone ? 'rgba(78,205,196,0.3)' : 'var(--border-color)'}`,
+              }}>
+                <Tag color="cyan" style={{ borderRadius: 20, height: 'fit-content', alignSelf: 'flex-start', flexShrink: 0, marginRight: 0 }}>
+                  {STAGE_LABELS[entry.stage] || `GĐ ${entry.stage}`}
+                </Tag>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ display: 'block', fontSize: 13, wordBreak: 'break-word' }}>{entry.note}</Text>
+                  <Text type="secondary" style={{ display: 'block', fontSize: 11, marginTop: 3 }}>
+                    {entry.milestone ? '✨ Cột mốc · ' : ''}{entry.date}
+                  </Text>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {collection.length > 0 && <CollectionSection collection={collection} cardStyle={cardStyle} />}
 
       {giftModalNode}
+
+      <Modal
+        open={showJournalModal}
+        title={journalIsMilestone ? `✨ Cây lên ${STAGE_LABELS[journalStage] || `giai đoạn ${journalStage}`}!` : '📖 Thêm ký ức'}
+        onCancel={() => setShowJournalModal(false)}
+        onOk={() => {
+          if (journalInput.trim()) saveJournalEntry(journalStage, journalInput, journalIsMilestone);
+          setShowJournalModal(false);
+        }}
+        okText="Lưu ký ức"
+        cancelText="Bỏ qua"
+        destroyOnClose
+      >
+        {journalIsMilestone && (
+          <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 13 }}>
+            Ghi lại điều gì đó đặc biệt về khoảnh khắc này nhé! (Có thể bỏ qua)
+          </Text>
+        )}
+        <TextArea
+          value={journalInput}
+          onChange={e => setJournalInput(e.target.value)}
+          placeholder={journalIsMilestone ? 'Hôm nay tôi đã hoàn thành...' : 'Ghi điều gì đó về cây...'}
+          rows={3}
+          maxLength={200}
+          showCount
+          style={{ borderRadius: 10 }}
+          autoFocus
+        />
+      </Modal>
+
+      <Modal
+        open={renaming}
+        title="✏️ Đổi tên cây"
+        onCancel={() => setRenaming(false)}
+        onOk={handleRename}
+        okText="Lưu"
+        cancelText="Hủy"
+        destroyOnClose
+      >
+        <Input
+          value={renameValue}
+          onChange={e => setRenameValue(e.target.value)}
+          placeholder="Tên cây mới..."
+          maxLength={30}
+          size="large"
+          style={{ borderRadius: 10, marginTop: 8 }}
+          onPressEnter={handleRename}
+          showCount
+        />
+      </Modal>
     </div>
   );
 }

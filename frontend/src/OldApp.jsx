@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import { useAuth } from './contexts/AuthContext';
-import { Layout, Menu, Card, Typography, Input, InputNumber, Button, List, Tag, Statistic, Row, Col, Progress, message, Space, Avatar, Badge, Select, Timeline, Segmented, Checkbox, Modal, DatePicker } from 'antd';
+import { Layout, Menu, Card, Typography, Input, InputNumber, Button, List, Tag, Statistic, Row, Col, Progress, message, Space, Avatar, Badge, Select, Timeline, Segmented, Checkbox, Modal, DatePicker, Drawer } from 'antd';
 import dayjs from 'dayjs';
-import { HomeOutlined, DeleteOutlined, CalendarOutlined, CoffeeOutlined, RocketOutlined, ThunderboltOutlined, UserOutlined, StarFilled, TrophyOutlined, TeamOutlined, CrownFilled, BarChartOutlined, SoundOutlined, StopOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons';
+import { HomeOutlined, DeleteOutlined, CalendarOutlined, CoffeeOutlined, RocketOutlined, ThunderboltOutlined, UserOutlined, StarFilled, TrophyOutlined, TeamOutlined, CrownFilled, BarChartOutlined, SoundOutlined, StopOutlined, CloseOutlined, CheckOutlined, MenuOutlined } from '@ant-design/icons';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 import { useTheme } from './contexts/ThemeContext';
 import TreePage from './components/Dashboard/TreePage';
@@ -170,6 +170,8 @@ export default function App() {
   const [quickInput, setQuickInput] = useState('');
   const [quickDeadline, setQuickDeadline] = useState(null);
   const [activeKey, setActiveKey] = useState('1');
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pomoSessions, setPomoSessions] = useState(0);
   const [friendCodeInput, setFriendCodeInput] = useState('');
@@ -318,18 +320,18 @@ export default function App() {
 
   // ─── HELPER: Kiểm tra toàn bộ achievement sau sự kiện ─────────────────────
   const checkAchievements = async ({ completedCount, newXp, newStreak, newDeepWorkMinutes }) => {
-    // first_task: hoàn thành task đầu tiên
-    if (completedCount >= 1) await grantAchievement('first_task', 30);
-    // tasks_10: hoàn thành tổng 10 task
+    if (completedCount >= 1)  await grantAchievement('first_task', 30);
     if (completedCount >= 10) await grantAchievement('tasks_10', 100);
-    // level_5: XP đủ level 5 (level = floor(log2(xp/50+1))+1 >= 5 => xp >= 750)
-    if (newXp >= 750) await grantAchievement('level_5', 150);
-    // streak_3
-    if (newStreak >= 3) await grantAchievement('streak_3', 50);
-    // streak_7
-    if (newStreak >= 7) await grantAchievement('streak_7', 100);
-    // deep_work_1h
-    if (newDeepWorkMinutes !== undefined && newDeepWorkMinutes >= 60) await grantAchievement('deep_work_1h', 80);
+    if (completedCount >= 50) await grantAchievement('tasks_50', 200);
+    if (newXp >= 750)         await grantAchievement('level_5', 150);
+    if (newXp >= 3150)        await grantAchievement('level_7', 250);
+    if (newXp >= 25550)       await grantAchievement('level_10', 500);
+    if (newStreak >= 3)       await grantAchievement('streak_3', 50);
+    if (newStreak >= 7)       await grantAchievement('streak_7', 100);
+    if (newStreak >= 30)      await grantAchievement('streak_30', 300);
+    if (newDeepWorkMinutes !== undefined && newDeepWorkMinutes >= 60)   await grantAchievement('deep_work_1h', 80);
+    if (newDeepWorkMinutes !== undefined && newDeepWorkMinutes >= 300)  await grantAchievement('deep_work_5h', 150);
+    if (newDeepWorkMinutes !== undefined && newDeepWorkMinutes >= 1200) await grantAchievement('deep_work_20h', 300);
   };
 
   // Handle logout
@@ -464,6 +466,16 @@ export default function App() {
     setXpFlash(true); setTimeout(() => setXpFlash(false), 600);
     message.success(`🎯 Quest hoàn thành! +${xpReward} XP bonus!`);
   };
+
+  useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) setDrawerOpen(false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => { if (user) { requestNotificationPermission(); checkWeeklyReset().then(() => fetchTasks()); fetchTodayLog(); } }, [user]);
   useEffect(() => { if (user) { loadDailyQuests(profile?.procrastination_group || null); } }, [user, profile?.procrastination_group]);
@@ -1658,51 +1670,76 @@ export default function App() {
     );
   }
 
+  const menuItems = [
+    { key: '1', icon: <HomeOutlined />, label: 'Dashboard' },
+    { key: '2', icon: <CalendarOutlined />, label: 'Lịch chạy show' },
+    { key: '3', icon: <CoffeeOutlined />, label: 'Góc Deep Work' },
+    { type: 'divider' },
+    { key: '4', icon: <span>🌳</span>, label: 'Cây của tôi' },
+    { key: '5', icon: <TrophyOutlined />, label: 'Thành tích' },
+    { key: '6', icon: <UserOutlined />, label: 'Hồ sơ cá nhân' },
+    { key: '7', icon: <TeamOutlined />, label: <Badge count={pendingRequests.length + incomingGifts.length} size="small" offset={[8, 0]}>Bạn bè</Badge> },
+    { key: '8', icon: <BarChartOutlined />, label: 'Thống kê' },
+  ];
+
   return (
     <>
     <Layout style={{ minHeight: '100vh', fontFamily: "'Inter', 'Nunito', sans-serif" }}>
-      <Sider theme={theme} width={260} style={{ background: 'var(--bg-surface)', borderRight: '1px solid var(--border-color)' }}>
+      {!isMobile && (
+        <Sider theme={theme} width={260} style={{ background: 'var(--bg-surface)', borderRight: '1px solid var(--border-color)' }}>
+          <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 20px' }}>
+              <div style={{ background: 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)', borderRadius: 16, padding: '12px 20px', display: 'flex', alignItems: 'center', width: '100%', boxShadow: '0 4px 20px rgba(255,107,107,0.3)' }}>
+                  <RocketOutlined style={{ color: '#fff', fontSize: 24, marginRight: 10 }} />
+                  <Text style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>STUDENT HUB</Text>
+              </div>
+          </div>
+          <Menu mode="inline" selectedKeys={[activeKey]} onClick={e => setActiveKey(e.key)} style={{ background: 'transparent', borderRight: 'none', padding: '10px 16px', fontWeight: 600 }} items={menuItems} />
+        </Sider>
+      )}
+      <Drawer
+        open={isMobile && drawerOpen}
+        placement="left"
+        onClose={() => setDrawerOpen(false)}
+        width={260}
+        closable={false}
+        styles={{ body: { padding: 0, background: 'var(--bg-surface)' }, header: { display: 'none' } }}
+      >
         <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 20px' }}>
             <div style={{ background: 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)', borderRadius: 16, padding: '12px 20px', display: 'flex', alignItems: 'center', width: '100%', boxShadow: '0 4px 20px rgba(255,107,107,0.3)' }}>
                 <RocketOutlined style={{ color: '#fff', fontSize: 24, marginRight: 10 }} />
                 <Text style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>STUDENT HUB</Text>
             </div>
         </div>
-        <Menu mode="inline" selectedKeys={[activeKey]} onClick={e => setActiveKey(e.key)} style={{ background: 'transparent', borderRight: 'none', padding: '10px 16px', fontWeight: 600 }} items={[
-          { key: '1', icon: <HomeOutlined />, label: 'Dashboard' },
-          { key: '2', icon: <CalendarOutlined />, label: 'Lịch chạy show' },
-          { key: '3', icon: <CoffeeOutlined />, label: 'Góc Deep Work' },
-          { type: 'divider' },
-          { key: '4', icon: <span>🌳</span>, label: 'Cây của tôi' },
-          { key: '5', icon: <TrophyOutlined />, label: 'Thành tích' },
-          { key: '6', icon: <UserOutlined />, label: 'Hồ sơ cá nhân' },
-          { key: '7', icon: <TeamOutlined />, label: <Badge count={pendingRequests.length + incomingGifts.length} size="small" offset={[8, 0]}>Bạn bè</Badge> },
-          { key: '8', icon: <BarChartOutlined />, label: 'Thống kê' },
-        ]} />
-      </Sider>
+        <Menu mode="inline" selectedKeys={[activeKey]} onClick={e => { setActiveKey(e.key); setDrawerOpen(false); }} style={{ background: 'transparent', borderRight: 'none', padding: '10px 16px', fontWeight: 600 }} items={menuItems} />
+      </Drawer>
       <Layout style={{ background: 'var(--bg-primary)' }}>
-        <Header style={{ background: 'var(--bg-surface)', padding: '0 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', height: 80 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Tag className={xpFlash ? 'xp-flash' : ''} style={{ borderRadius: 20, padding: '4px 14px', fontWeight: 700, background: 'rgba(255,107,107,0.15)', color: '#FF6B6B', border: '1px solid rgba(255,107,107,0.3)', boxShadow: '0 0 12px rgba(255,107,107,0.2)' }}>
+        <Header style={{ background: 'var(--bg-surface)', padding: isMobile ? '0 14px' : '0 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', height: isMobile ? 64 : 80, gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, minWidth: 0, flex: 1 }}>
+              {isMobile && (
+                <Button type="text" shape="circle" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} style={{ fontSize: 18, flexShrink: 0 }} />
+              )}
+              <Tag className={xpFlash ? 'xp-flash' : ''} style={{ borderRadius: 20, padding: '4px 14px', fontWeight: 700, background: 'rgba(255,107,107,0.15)', color: '#FF6B6B', border: '1px solid rgba(255,107,107,0.3)', boxShadow: '0 0 12px rgba(255,107,107,0.2)', margin: 0 }}>
                 <ThunderboltOutlined /> {profile?.current_xp || 0} XP
               </Tag>
-              <Tag style={{ borderRadius: 20, padding: '4px 14px', fontWeight: 700, background: 'rgba(193,53,132,0.15)', color: '#C13584', border: '1px solid rgba(193,53,132,0.3)', boxShadow: '0 0 12px rgba(193,53,132,0.2)' }}>
+              <Tag style={{ borderRadius: 20, padding: '4px 14px', fontWeight: 700, background: 'rgba(193,53,132,0.15)', color: '#C13584', border: '1px solid rgba(193,53,132,0.3)', boxShadow: '0 0 12px rgba(193,53,132,0.2)', margin: 0 }}>
                 <StarFilled /> Lv.{Math.max(1, Math.floor(Math.log2((profile?.current_xp || 0) / 50 + 1)) + 1)}
               </Tag>
             </div>
-            <Space size="middle">
+            <Space size={isMobile ? 'small' : 'middle'}>
                 <Button type="text" shape="circle" onClick={toggleTheme} style={{fontSize: 20}}>
                   {theme === 'dark' ? '☀️' : '🌙'}
                 </Button>
-                <Tag style={{borderRadius: 20, padding: '4px 12px', fontWeight: 600, background: 'var(--input-bg)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)'}}>
-                  👤 {profile?.username || user?.email?.split('@')[0] || 'Student'}
-                </Tag>
+                {!isMobile && (
+                  <Tag style={{borderRadius: 20, padding: '4px 12px', fontWeight: 600, background: 'var(--input-bg)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)'}}>
+                    👤 {profile?.username || user?.email?.split('@')[0] || 'Student'}
+                  </Tag>
+                )}
                 <Badge dot color="#52c41a" onClick={() => setActiveKey('6')} style={{ cursor: 'pointer' }}>
-                    <Avatar size="large" src={profile?.avatar_url?.startsWith('data:') ? profile.avatar_url : null} style={{ cursor: 'pointer', border: '2px solid rgba(255,255,255,0.15)', backgroundColor: '#fff' }} />
+                    <Avatar size={isMobile ? 'default' : 'large'} src={profile?.avatar_url?.startsWith('data:') ? profile.avatar_url : null} style={{ cursor: 'pointer', border: '2px solid rgba(255,255,255,0.15)', backgroundColor: '#fff' }} />
                 </Badge>
             </Space>
         </Header>
-        <Content style={{ padding: '32px 40px', background: 'var(--bg-primary)' }}>
+        <Content style={{ padding: isMobile ? '16px 12px' : '32px 40px', background: 'var(--bg-primary)' }}>
             <div style={{ maxWidth: 1200, margin: '0 auto' }}>{renderContent()}</div>
         </Content>
       </Layout>

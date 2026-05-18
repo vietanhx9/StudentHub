@@ -19,6 +19,16 @@ export function ThemeProvider({ children }) {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        setTheme(prev => prev === 'light' ? 'dark' : 'light');
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       {children}

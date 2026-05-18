@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import AuthPage from './components/Auth/AuthPage';
 import TreeSetupPage from './components/Auth/TreeSetupPage';
 import Dashboard from './OldApp'; // Tạm import App cũ làm Dashboard
+import PWAUpdatePrompt from './components/PWAUpdatePrompt';
 import { Spin, ConfigProvider, theme as antdTheme } from 'antd';
 
 // Component kiểm tra auth và render UI phù hợp
@@ -52,6 +53,7 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <ThemeWrapper />
+        <PWAUpdatePrompt />
       </AuthProvider>
     </ThemeProvider>
   );

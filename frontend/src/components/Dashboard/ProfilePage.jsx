@@ -3,6 +3,7 @@ import { Card, Avatar, Typography, Button, Tag, Progress, Divider, Row, Col, Inp
 import { UserOutlined, MailOutlined, CopyOutlined, EditOutlined, LogoutOutlined, SaveOutlined, CloseOutlined, TrophyOutlined, StarFilled, CameraOutlined, ExperimentOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import QuizPage, { CAUSE_META, SEVERITY_META, parseGroupCode } from './QuizPage';
+import StreakCalendar from './StreakCalendar';
 
 const { Title, Text } = Typography;
 
@@ -170,6 +171,9 @@ export default function ProfilePage() {
           Còn {xpInfo.needed - xpInfo.current} XP nữa để lên Lv.{level + 1} ({LEVEL_NAMES[level + 1] || 'MAX'})
         </Text>
       </Card>
+
+      {/* STREAK CALENDAR */}
+      <StreakCalendar />
 
       {/* PHÂN TÍCH KIỂU TRÌ HOÃN */}
       {userCause ? (

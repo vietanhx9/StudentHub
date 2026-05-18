@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "icons": "node scripts/generate-pwa-icons.js"
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.6",
@@ -25,6 +26,8 @@
     "eslint-plugin-react": "^7.34.1",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
-    "vite": "^5.2.0"
+    "sharp": "^0.34.5",
+    "vite": "^5.2.0",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }
